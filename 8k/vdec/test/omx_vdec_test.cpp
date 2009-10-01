@@ -1684,24 +1684,32 @@ static int Read_Buffer_ArbitraryBytes(OMX_BUFFERHEADERTYPE  *pBufHdr)
 static int Read_Buffer_From_Vop_Start_Code_File(OMX_BUFFERHEADERTYPE  *pBufHdr)
 {
     unsigned int readOffset = 0;
+    unsigned int ret = 0;
     int bytes_read = 0;
     unsigned int code = 0;
     pBufHdr->nFilledLen = 0;
     static unsigned int header_code = 0;
+    unsigned char data;
 
     QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,"Inside %s \n", __FUNCTION__);
 
     do
     {
       //Start codes are always byte aligned.
+      if(readOffset <= pBufHdr->nAllocLen) {
       bytes_read = fread(&pBufHdr->pBuffer[readOffset],1, 1,inputBufferFile);
+         data = pBufHdr->pBuffer[readOffset];
+      }
+      else {
+         bytes_read = fread(&data,1, 1,inputBufferFile);
+      }
       if(!bytes_read)
       {
           QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,"Bytes read Zero \n");
           break;
       }
       code <<= 8;
-      code |= (0x000000FF & pBufHdr->pBuffer[readOffset]);
+      code |= (0x000000FF & data);
       //VOP start code comparision
       if (readOffset>3)
       {
@@ -1735,7 +1743,8 @@ static int Read_Buffer_From_Vop_Start_Code_File(OMX_BUFFERHEADERTYPE  *pBufHdr)
     }while (1);
     pBufHdr->nTimeStamp = timeStampLfile;
     timeStampLfile += timestampInterval;
-    return readOffset;
+    ret = ((readOffset > pBufHdr->nAllocLen)?pBufHdr->nAllocLen:readOffset);
+    return ret;
 }
 
 static int Read_Buffer_From_Size_Nal(OMX_BUFFERHEADERTYPE  *pBufHdr)
@@ -1744,7 +1753,7 @@ static int Read_Buffer_From_Size_Nal(OMX_BUFFERHEADERTYPE  *pBufHdr)
     char temp_size[SIZE_NAL_FIELD_MAX];
     int i = 0;
     int j = 0;
-    unsigned int size = 0;   // Need to make sure that uint32 has SIZE_NAL_FIELD_MAX (4) bytes
+    unsigned int size = 0, readSize = 0;   // Need to make sure that uint32 has SIZE_NAL_FIELD_MAX (4) bytes
     int bytes_read = 0;
 
     // read the "size_nal_field"-byte size field
@@ -1767,11 +1776,18 @@ static int Read_Buffer_From_Size_Nal(OMX_BUFFERHEADERTYPE  *pBufHdr)
     }
     size = (unsigned int)(*((unsigned int *)(temp_size)));
 
+    readSize =( (size > pBufHdr->nAllocLen)?pBufHdr->nAllocLen:size);
+
     // now read the data
-    bytes_read = fread(pBufHdr->pBuffer + pBufHdr->nOffset + nalSize, 1, size, inputBufferFile);
-    if (bytes_read != size)
+    bytes_read = fread(pBufHdr->pBuffer + pBufHdr->nOffset + nalSize, 1, readSize, inputBufferFile);
+    if (bytes_read != readSize) 
     {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR, "Failed to read frame\n");
+    }
+    if(readSize < size)
+    {
+      /* reseek to beginning of sequence header */
+       fseek(inputBufferFile, size-bytes_read, SEEK_CUR);
     }
 
     return bytes_read + nalSize;

@@ -948,6 +948,7 @@ Vdec_ReturnType vdec_post_input_buffer(struct VDecoder * dec,
             "vdec: inputBuffer[].base %x, buffer size %d\n",
             dec->ctxt->inputBuffer[buf_index].base,
             dec->ctxt->inputBuffer[buf_index].bufferSize);
+   copy_size = frame->len;
    if (!is_pmem) {
       copy_size =
           ((dec->ctxt->inputBuffer[buf_index].bufferSize >=
@@ -969,7 +970,7 @@ Vdec_ReturnType vdec_post_input_buffer(struct VDecoder * dec,
    input.timestamp_lo = (int32) (frame->timestamp & 0x00000000FFFFFFFFLL);
    input.timestamp_hi =
        (int32) ((frame->timestamp & 0xFFFFFFFF00000000LL) >> 32);
-   input.size = (uint32) frame->len;
+   input.size = (uint32) copy_size;
    input.data = (uint32) (dec->ctxt->inputBuffer[buf_index].omx_cookie);
    input.flags = frame->flags;
    //RAJESH: TBD below
@@ -1024,6 +1025,10 @@ Vdec_ReturnType vdec_post_input_buffer(struct VDecoder * dec,
        ((struct adsp_module *)dec->adsp_module, input, 0) < 0) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW,
               "vdec: Post Input Buffer Failed\n");
+      pthread_mutex_lock(&pthread_info->in_buf_lock);
+      dec->ctxt->inputBuffer[i].state = VDEC_BUFFER_WITH_VDEC_CORE;
+      pthread_mutex_unlock(&pthread_info->in_buf_lock);
+      dec->ctxt->buffer_done(dec->ctxt,cookie);
       return VDEC_EFAILED;
    }
 

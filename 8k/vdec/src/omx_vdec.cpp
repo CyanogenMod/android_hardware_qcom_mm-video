@@ -4592,7 +4592,6 @@ OMX_ERRORTYPE omx_vdec::
       {
          has_frame = MP4_Utils::HasFrame(buffer);
       }
-
       ret =
           omx_vdec_check_port_settings(buffer, height, width,
                    bInterlace, cropx, cropy,
@@ -6899,8 +6898,7 @@ OMX_ERRORTYPE omx_vdec::
 
    if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.avc", 26) == 0) {
       if (m_h264_utils != NULL) {
-         m_h264_utils->allocate_rbsp_buffer(m_vdec_cfg.inputReq.
-                        bufferSize);
+         m_h264_utils->allocate_rbsp_buffer(OMX_CORE_INPUT_BUFFER_SIZE);
       } else {
          QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
                  "ERROR!!! m_h264_utils exist\n");
@@ -7368,6 +7366,7 @@ OMX_ERRORTYPE omx_vdec::
                OMX_INOUT bool * isPartialFrame) {
    OMX_U32 code = m_arbitrary_bytes_info.start_code.m_last_4byte;
    OMX_U32 readSize = 0;
+   OMX_U32 copy_size = 0;
    OMX_U32 pos = 0;
    OMX_U32 in_len = source->nFilledLen;
    OMX_U8 *inputBitStream = source->pBuffer + source->nOffset;
@@ -7385,6 +7384,7 @@ OMX_ERRORTYPE omx_vdec::
           m_arbitrary_bytes_info.start_code.m_start_code) {
          if (readSize > 3) {
             readSize = readSize - 3;
+            copy_size = readSize;
             if ((m_arbitrary_bytes_info.start_code.
                  m_last_start_code & m_arbitrary_bytes_info.
                  start_code.m_start_code_mask)
@@ -7405,14 +7405,23 @@ OMX_ERRORTYPE omx_vdec::
                   if (index != -1) {
                      OMX_U8 *temp_buffer =
                          dest->pBuffer;
+                     OMX_U32 temp_size =
+                         dest->nFilledLen;
                      dest->pBuffer =
                          m_extra_buf_info
                          [index].
                          extra_pBuffer;
+                     if(dest->nAllocLen < dest->nFilledLen) {
+                         QTV_MSG_PRIO1(QTVDIAG_GENERAL,
+                                  QTVDIAG_PRIO_ERROR,
+                                  "Not enough memory %d \n",
+                                  __LINE__);
+                         temp_size = dest->nAllocLen;
+                         m_is_copy_truncated = true;
+                     }
                      memcpy(dest->pBuffer,
                             temp_buffer,
-                            dest->
-                            nFilledLen);
+                            temp_size);
                   } else {
                      QTV_MSG_PRIO
                          (QTVDIAG_GENERAL,
@@ -7442,23 +7451,48 @@ OMX_ERRORTYPE omx_vdec::
                      dest->nFilledLen++;
                   }
                }
-               memcpy(dest->pBuffer + dest->nFilledLen,
-                      source->pBuffer +
-                      source->nOffset, readSize);
+               if(!m_is_copy_truncated) {
+                  copy_size = readSize;
+                  if((dest->nAllocLen - dest->nFilledLen)
+                      < readSize) {
+                     QTV_MSG_PRIO1(QTVDIAG_GENERAL,
+                                  QTVDIAG_PRIO_ERROR,
+                                  "ERROR -- memcpy failed at line %d \n",
+                                  __LINE__);
+                     copy_size = dest->nAllocLen - dest->nFilledLen;
+                     m_is_copy_truncated = true;
+                  }
+                  memcpy(dest->pBuffer + dest->nFilledLen,
+                         source->pBuffer +
+                         source->nOffset, copy_size);
+              }
             } else
                 if (find_extra_buffer_index(dest->pBuffer)
                != -1) {
                QTV_MSG_PRIO(QTVDIAG_GENERAL,
                        QTVDIAG_PRIO_MED,
                        "Concatenate to extra buffer\n");
-               memcpy(dest->pBuffer + dest->nFilledLen,
-                      source->pBuffer +
-                      source->nOffset, readSize);
+               if(!m_is_copy_truncated) {
+                  copy_size = readSize;
+                  if((dest->nAllocLen - dest->nFilledLen)
+                      < readSize) {
+                     QTV_MSG_PRIO1(QTVDIAG_GENERAL,
+                                  QTVDIAG_PRIO_ERROR,
+                                  "ERROR -- memcpy failed at line %d \n",
+                                  __LINE__);
+                     copy_size = dest->nAllocLen - dest->nFilledLen;
+                     m_is_copy_truncated = true;
+                  }
+                  memcpy(dest->pBuffer + dest->nFilledLen,
+                         source->pBuffer +
+                         source->nOffset, copy_size);
+              }
             }
-            dest->nFilledLen += readSize;
+            dest->nFilledLen += copy_size;
             dest->nFlags = source->nFlags;
             dest->nTimeStamp = source->nTimeStamp;
             *isPartialFrame = false;
+            m_is_copy_truncated = false;
             m_arbitrary_bytes_info.start_code.
                 m_last_start_code = 0x00;
             break;
@@ -7472,6 +7506,7 @@ OMX_ERRORTYPE omx_vdec::
             dest->nFlags = source->nFlags;
             dest->nTimeStamp = source->nTimeStamp;
             *isPartialFrame = false;
+            m_is_copy_truncated = false;
             readSize++;
             break;
          } else {
@@ -7497,10 +7532,19 @@ OMX_ERRORTYPE omx_vdec::
                      extra_pBuffer, dest->pBuffer,
                      dest->nOffset, dest->nFilledLen);
             OMX_U8 *temp_buffer = dest->pBuffer;
+            OMX_U32 temp_size = dest->nOffset;
             dest->pBuffer =
                 m_extra_buf_info[index].extra_pBuffer;
+            if(dest->nAllocLen < dest->nOffset) {
+               QTV_MSG_PRIO1(QTVDIAG_GENERAL,
+                        QTVDIAG_PRIO_ERROR,
+                       "Not enough memory %d \n",
+                        __LINE__);
+               temp_size = dest->nAllocLen;
+               m_is_copy_truncated = true;
+            }
             memcpy(dest->pBuffer, temp_buffer,
-                   dest->nOffset);
+                   temp_size);
          } else {
             QTV_MSG_PRIO1(QTVDIAG_GENERAL,
                      QTVDIAG_PRIO_ERROR,
@@ -7534,10 +7578,21 @@ OMX_ERRORTYPE omx_vdec::
          m_arbitrary_bytes_info.start_code.m_last_start_code =
              0x00;
       }
-
-      memcpy(dest->pBuffer + dest->nFilledLen,
-             source->pBuffer + source->nOffset, readSize);
-      dest->nFilledLen += readSize;
+      if(!m_is_copy_truncated) {
+         copy_size = readSize;
+         if((dest->nAllocLen - dest->nFilledLen)
+            < readSize) {
+               QTV_MSG_PRIO1(QTVDIAG_GENERAL,
+                       QTVDIAG_PRIO_ERROR,
+                       "ERROR -- memcpy failed at line %d \n",
+                        __LINE__);
+               copy_size = dest->nAllocLen - dest->nFilledLen;
+               m_is_copy_truncated = true;
+         }
+         memcpy(dest->pBuffer + dest->nFilledLen,
+                source->pBuffer + source->nOffset, copy_size);
+      }
+      dest->nFilledLen += copy_size;
       dest->nFlags = source->nFlags;
       dest->nTimeStamp = source->nTimeStamp;
 
@@ -7820,6 +7875,8 @@ OMX_ERRORTYPE omx_vdec::
 
       if (complete_nal) {
          *isPartialFrame = false;
+          m_is_copy_truncated = false;
+          m_arbitrary_bytes_info.frame_size.m_size_remaining = 0;
       } else {
          *isPartialFrame = true;
       }

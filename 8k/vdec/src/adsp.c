@@ -63,8 +63,8 @@ static const char *logFN = "/data/adsp_log.txt";
 
 struct adsp_module {
    int fd;
-   int dead;
-   int init_done;
+    volatile int dead;
+    volatile int init_done;
 
    void *ctxt;
    adsp_msg_frame_done_func frame_done;
