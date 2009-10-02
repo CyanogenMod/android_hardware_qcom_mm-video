@@ -26,6 +26,7 @@ OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 --------------------------------------------------------------------------*/
 #include "MP4_Utils.h"
+#include "omx_vdec.h"
 # include <stdio.h>
 
 
@@ -37,7 +38,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 **                            Function Definitions
 ** ======================================================================= */
 
-/*<EJECT>*/
+/*<EJECT>*/
 /*===========================================================================
 FUNCTION:
   MP4_Utils constructor
@@ -54,7 +55,7 @@ MP4_Utils::MP4_Utils()
    m_SrcHeight = 0;
 }
 
-/* <EJECT> */
+/* <EJECT> */
 /*===========================================================================
 
 FUNCTION:
@@ -70,7 +71,7 @@ MP4_Utils::~MP4_Utils()
 {
 }
 
-/* <EJECT> */
+/* <EJECT> */
 /*===========================================================================
 FUNCTION:
   read_bit_field
@@ -113,7 +114,7 @@ uint32 MP4_Utils::read_bit_field(posInfoType * posPtr, uint32 size) {
 
 }
 
-/* <EJECT> */
+/* <EJECT> */
 /*===========================================================================
 FUNCTION:
   find_code
@@ -379,7 +380,7 @@ int16 MP4_Utils::populateHeightNWidthFromShortHeader(mp4StreamType * psBits) {
    return MP4ERROR_SUCCESS;
 }
 
-/* <EJECT> */
+/* <EJECT> */
 /*===========================================================================
 
 FUNCTION:
@@ -402,6 +403,8 @@ SIDE EFFECTS:
 
 bool MP4_Utils::parseHeader(mp4StreamType * psBits) {
    uint32 profile_and_level_indication = 0;
+   uint32 ver_id = 1,sprite_enable = 0;
+   long hxw = 0;
 //  ASSERT( psBits != NULL );
 //  ASSERT( psBits->data != NULL );
    m_posInfo.bitPos = 0;
@@ -447,7 +450,8 @@ bool MP4_Utils::parseHeader(mp4StreamType * psBits) {
    if (read_bit_field(&m_posInfo, 1)) {
       // 4 -> video_object_layer_verid
       // 3 -> video_object_layer_priority
-      read_bit_field(&m_posInfo, 7);
+      ver_id = read_bit_field (&m_posInfo, 4);
+      read_bit_field(&m_posInfo, 3);
    }
    // 4 -> aspect_ratio_info
    if (EXTENDED_PAR == read_bit_field(&m_posInfo, 4)) {
@@ -513,6 +517,75 @@ bool MP4_Utils::parseHeader(mp4StreamType * psBits) {
    if (1 != read_bit_field(&m_posInfo, 1))
       return false;
    m_SrcHeight = read_bit_field(&m_posInfo, 13);
+   /* marker_bit*/
+   read_bit_field (&m_posInfo, 1);
+   /* interlaced*/
+   read_bit_field (&m_posInfo, 1);
+   /* obmc_disable*/
+   read_bit_field (&m_posInfo, 1);
+   /* Nr. of bits for sprite_enabled is 1 for version 1, and 2 for
+   ** version 2, according to p. 114, Table v2-2. */
+   /* sprite_enable*/
+   if(ver_id == 1) {
+      sprite_enable = read_bit_field (&m_posInfo, 1);
+   }
+   else {
+      sprite_enable = read_bit_field (&m_posInfo, 2);
+   }
+   if (sprite_enable) {
+       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,"No Support for Sprite Enabled clips\n");
+       return false;
+   }
+   /* not_8_bit*/
+   if ( read_bit_field (&m_posInfo, 1) )
+   {
+     /* quant_precision*/
+     read_bit_field (&m_posInfo, 4);
+     /* bits_per_pixel*/
+     read_bit_field (&m_posInfo, 4);
+   }
+   /* quant_type*/
+   if (read_bit_field (&m_posInfo, 1)) {
+     /*load_intra_quant_mat*/
+     if (read_bit_field (&m_posInfo, 1)) {
+       unsigned char cnt = 2, data;
+       /*intra_quant_mat */
+       read_bit_field (&m_posInfo, 8);
+       data = read_bit_field (&m_posInfo, 8);
+       while (data && cnt < 64) {
+         data = read_bit_field (&m_posInfo, 8);
+         cnt++;
+       }
+     }
+     /*load_non_intra_quant_mat*/
+     if (read_bit_field (&m_posInfo, 1)) {
+       unsigned char cnt = 2, data;
+       /*non_intra_quant_mat */
+       read_bit_field (&m_posInfo, 8);
+       data = read_bit_field (&m_posInfo, 8);
+       while (data && cnt < 64) {
+         data = read_bit_field (&m_posInfo, 8);
+         cnt++;
+       }
+     }
+   }
+   if ( ver_id != 1 )
+   {
+     /* quarter_sample*/
+     read_bit_field (&m_posInfo, 1);
+   }
+   /* complexity_estimation_disable*/
+   read_bit_field (&m_posInfo, 1);
+   /* resync_marker_disable*/
+   read_bit_field (&m_posInfo, 1);
+   /* data_partitioned*/
+   if ( read_bit_field (&m_posInfo, 1) ) {
+     hxw = m_SrcWidth* m_SrcHeight;
+     if(hxw > (OMX_CORE_WVGA_WIDTH*OMX_CORE_WVGA_HEIGHT)) {
+       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,"Data partition clips not supported for Greater than WVGA resolution \n");
+       return false;
+     }
+   }
 
    // not doing the remaining parsing
    return validate_profile_and_level(profile_and_level_indication);
