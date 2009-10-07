@@ -281,7 +281,8 @@ m_bArbitraryBytes(true),
 m_arbitrary_bytes_input_mem_ptr(NULL),
 m_current_arbitrary_bytes_input(NULL),
 m_bPartialFrame(false),
-m_bStartCode(false), m_header_state(HEADER_STATE_RECEIVED_NONE), m_use_pmem(0)
+m_bStartCode(false), m_header_state(HEADER_STATE_RECEIVED_NONE), m_use_pmem(0),
+flush_before_vdec_op_q(NULL)
 {
    /* Assumption is that , to begin with , we have all the frames with client */
    memset(m_out_flags, 0x00, (OMX_CORE_NUM_OUTPUT_BUFFERS + 7) / 8);
@@ -298,16 +299,14 @@ m_bStartCode(false), m_header_state(HEADER_STATE_RECEIVED_NONE), m_use_pmem(0)
       input[i] = NULL;
    }
 
-   if (m_bArbitraryBytes) {
-      for (int i = 0; i < OMX_CORE_NUM_INPUT_BUFFERS; i++) {
-         m_arbitrary_bytes_input[i] = NULL;
-         memset(&m_extra_buf_info[i], 0,
-                sizeof(struct
-                  omx_extra_arbitrarybytes_buff_info));
-         m_input_buff_info[i].pArbitrary_bytes_freed = NULL;
-         m_input_buff_info[i].bfree_input = true;
-      }
-   }
+   for (int i = 0; i < OMX_CORE_NUM_INPUT_BUFFERS; i++) {
+      m_arbitrary_bytes_input[i] = NULL;
+      memset(&m_extra_buf_info[i], 0,
+              sizeof(struct
+               omx_extra_arbitrarybytes_buff_info));
+      m_input_buff_info[i].pArbitrary_bytes_freed = NULL;
+      m_input_buff_info[i].bfree_input = true;
+  }
 
    m_vendor_config.pData = NULL;
    m_bWaitForResource = false;
@@ -502,8 +501,16 @@ void omx_vdec::frame_done_cb(struct vdec_context *ctxt,
                     "Error: FrameDoneCb Ignored due to NULL callbacks \n");
          }
       } else {
+         if(frame->flags & FRAME_FATAL_ERROR) {
+             pThis->m_state = OMX_StateInvalid;
+             pThis->m_cb.EventHandler(&pThis->m_cmp, pThis->m_app_data,
+                    OMX_EventError,
+                    OMX_ErrorInvalidState, 0,
+                    NULL);
+             return;
+         }
          // fake frame provided by the decoder to indicate end of stream
-         if (frame->flags & FRAME_FLAG_EOS) {
+         else if (frame->flags & FRAME_FLAG_EOS) {
             OMX_BUFFERHEADERTYPE *pBufHdr =
                 (OMX_BUFFERHEADERTYPE *) pThis->
                 m_out_mem_ptr;
@@ -1068,6 +1075,10 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
    m_state = OMX_StateLoaded;
    m_first_pending_buf_idx = -1;
    flush_before_vdec_op_q = new genericQueue();
+   if(flush_before_vdec_op_q == NULL) {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,"flush_before_vdec_op_q creation failed\n");
+      eRet = OMX_ErrorInsufficientResources;
+   }
    eRet = create_msg_thread();
    return eRet;
 }

@@ -419,12 +419,11 @@ OMX_ERRORTYPE EventHandler(OMX_IN OMX_HANDLETYPE hComponent,
         case OMX_EventError:
             QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,
                          "OMX_EventError \n");
-	    currentStatus = ERROR_STATE;
+             currentStatus = INVALID_STATE;
             if (OMX_ErrorInvalidState == (OMX_ERRORTYPE)nData1)
             {
               QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,
                            "Invalid State \n");
-              currentStatus = INVALID_STATE;
               if(event_is_done == 0)
               {
                 QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,
@@ -496,7 +495,7 @@ OMX_ERRORTYPE FillBufferDone(OMX_OUT OMX_HANDLETYPE hComponent,
      * In case that there is no dynamic port setting, OMX will not call event cb,
      * instead OMX will send empty this buffer directly and we need to clear an event here
      */
-    if(waitForPortSettingsChanged)
+    if(waitForPortSettingsChanged && currentStatus != INVALID_STATE)
     {
       currentStatus = GOOD_STATE;
       waitForPortSettingsChanged = 0;

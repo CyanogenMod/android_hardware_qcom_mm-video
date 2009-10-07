@@ -203,6 +203,11 @@ void vdec_frame_cb_handler(void *vdec_context,
 
    case VDEC_FATAL_ERROR:
       {
+         static struct vdec_frame vdecFrame;
+         memset(&vdecFrame, 0, sizeof(vdecFrame));
+         vdecFrame.flags |= FRAME_FATAL_ERROR;
+         dec->ctxt->frame_done(dec->ctxt, &vdecFrame);
+
          QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_FATAL,
                  "vdec: callback status error fatal\n");
          break;
