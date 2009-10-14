@@ -1005,7 +1005,7 @@ bool H264_Utils::parseHeader(uint8 * encodedBytes,
                         newParam.crop_left,
                         newParam.crop_right,
                         newParam.crop_top,
-                        \newParam.crop_bot);
+                        newParam.crop_bot);
             } else {
                QTV_MSG_PRIO1(QTVDIAG_GENERAL,
                         QTVDIAG_PRIO_MED,
