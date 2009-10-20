@@ -60,7 +60,7 @@ LOCAL_MODULE            := libOmxVdec
 LOCAL_CFLAGS            := $(libOmxVdec-def)
 LOCAL_C_INCLUDES        := $(libOmxVdec-inc)
 LOCAL_PRELINK_MODULE    := false
-LOCAL_SHARED_LIBRARIES  := libutils liblog
+LOCAL_SHARED_LIBRARIES  := libutils liblog libbinder
 
 LOCAL_SRC_FILES         := src/adsp.c
 LOCAL_SRC_FILES         += src/pmem.c
@@ -88,7 +88,7 @@ LOCAL_MODULE            := mm-vdec-omx-test
 LOCAL_CFLAGS            := $(libOmxVdec-def)
 LOCAL_C_INCLUDES        := $(mm-vdec-test-inc)
 LOCAL_PRELINK_MODULE    := false
-LOCAL_SHARED_LIBRARIES  := libmm-omxcore libOmxVdec
+LOCAL_SHARED_LIBRARIES  := libmm-omxcore libOmxVdec libbinder
 
 LOCAL_SRC_FILES         := test/omx_vdec_test.cpp
 LOCAL_SRC_FILES         += test/queue.c

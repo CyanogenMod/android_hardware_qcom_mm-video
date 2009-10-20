@@ -42,7 +42,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <pthread.h>
 #include <semaphore.h>
 #ifdef _ANDROID_
-#include <utils/MemoryHeapBase.h>
+#include <binder/MemoryHeapBase.h>
 #endif
 #include "OMX_Core.h"
 #include "OMX_Component.h"

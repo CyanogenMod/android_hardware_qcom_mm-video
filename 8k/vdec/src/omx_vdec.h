@@ -51,7 +51,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 #ifdef _ANDROID_
 #include "cutils/log.h"
-#include <utils/MemoryHeapBase.h>
+#include <binder/MemoryHeapBase.h>
 #define LOG_NDEBUG 0
 #endif // _ANDROID_
 
