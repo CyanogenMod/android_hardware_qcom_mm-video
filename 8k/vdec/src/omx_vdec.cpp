@@ -55,6 +55,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define VC1_SP_MP_START_CODE_MASK   0xFF000000
 #define VC1_AP_START_CODE           0x00000100
 #define VC1_AP_START_CODE_MASK      0xFFFFFF00
+#define VC1_STRUCT_C_LEN            5
 
 #define VC1_AP_SLICE_START_CODE       0x0000010B
 #define VC1_AP_SLICE_START_CODE_MASK  0xFFFFFFFF
@@ -1066,6 +1067,7 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
       m_out_buf_count = OMX_CORE_NUM_OUTPUT_BUFFERS_VC1;
       m_outstanding_frames = -OMX_CORE_NUM_OUTPUT_BUFFERS_VC1;
       m_bAccumulate_subframe = true;
+      m_bArbitraryBytes =  false;
    }
 
    m_crop_dy = m_height = m_vdec_cfg.height;
@@ -1842,6 +1844,10 @@ bool omx_vdec::execute_input_flush(void)
                    m_current_arbitrary_bytes_input;
                m_current_arbitrary_bytes_input = NULL;
             }
+            else {
+               m_cb.EmptyBufferDone(&m_cmp, m_app_data,
+                          m_current_arbitrary_bytes_input);
+            }
          }
          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                   " Flush:: qsize %d ",
@@ -2067,7 +2073,7 @@ OMX_ERRORTYPE omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE hComp,
                    m_out_buf_count;
             }
             portDefn->nBufferSize =
-                m_height * m_width * 3 / 2;
+                m_port_height * m_port_width * 3 / 2;
             portDefn->format.video.eColorFormat =
                 m_color_format;
             portDefn->format.video.eCompressionFormat =
@@ -2916,7 +2922,15 @@ OMX_ERRORTYPE omx_vdec::set_config(OMX_IN OMX_HANDLETYPE hComp,
                 (OMX_U8 *) malloc((config->nDataSize));
             memcpy(m_vendor_config.pData, config->pData,
                    config->nDataSize);
-         } else {
+         } else if ((config->nDataSize == VC1_STRUCT_C_LEN)) {
+            QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_LOW,
+                         "set_config - VC1 Simple/Main profile struct C only\n");
+            m_vendor_config.nPortIndex = config->nPortIndex;
+            m_vendor_config.nDataSize  = config->nDataSize;
+            m_vendor_config.pData = (OMX_U8*)malloc(config->nDataSize);
+            memcpy(m_vendor_config.pData,config->pData,config->nDataSize);
+          }
+         else {
             QTV_MSG_PRIO(QTVDIAG_GENERAL,
                     QTVDIAG_PRIO_ERROR,
                     "set_config - Error: Unknown VC1 profile\n");
@@ -4602,6 +4616,13 @@ OMX_ERRORTYPE omx_vdec::
            28) == 0))
       {
          has_frame = MP4_Utils::HasFrame(buffer);
+      } else
+          if ((strncmp
+          (m_vdec_cfg.kind, "OMX.qcom.video.decoder.vc1",
+           26) == 0))
+      {
+         if(!m_bArbitraryBytes)
+          has_frame = false;
       }
       ret =
           omx_vdec_check_port_settings(buffer, height, width,
@@ -6442,7 +6463,14 @@ OMX_ERRORTYPE omx_vdec::omx_vdec_check_port_settings(OMX_BUFFERHEADERTYPE *
          QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW,
                   "omx_vdec_check_port_settings - VC1 Advance profile, %d x %d\n",
                   width, height);
-      } else {
+      } else if(m_vendor_config.nDataSize == VC1_STRUCT_C_LEN) {
+         QTV_MSG_PRIO2(QTVDIAG_GENERAL,QTVDIAG_PRIO_LOW,
+                      "QC_DEBUG :: omx_vdec_check_port_settings - VC1 height and width, %d x %d\n",
+                      width, height);
+          height = m_height;
+          width = m_width;
+      }
+      else {
          QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
                  "omx_vdec_check_port_settings - ERROR: Unknown VC1 profile. Couldn't find height and width\n");
       }
