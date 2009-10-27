@@ -1309,13 +1309,6 @@ int Play_Decoder()
       pInputBufHdrs[0]->nFilledLen = frameSize;
       QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,
                     "After Read_Buffer_From_RCV_File_Seq_Layer frameSize %d\n", frameSize);
-
-      pInputBufHdrs[0]->nOffset = pInputBufHdrs[0]->nFilledLen;
-      frameSize = Read_Buffer(pInputBufHdrs[0]);
-      pInputBufHdrs[0]->nFilledLen += frameSize;
-      QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,
-                   "After Read_Buffer frameSize %d\n", frameSize);
-
       pInputBufHdrs[0]->nInputPortIndex = 0;
       pInputBufHdrs[0]->nOffset = 0;
       pInputBufHdrs[0]->nFlags = 0;
