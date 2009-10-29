@@ -207,6 +207,8 @@ class H264_Utils {
                OMX_OUT NALU * nal_unit);
    bool validate_profile_and_level(uint32 profile, uint32 level);
 
+   bool m_default_profile_chk;
+   bool m_default_level_chk;
    unsigned m_height;
    unsigned m_width;
    H264ParamNaluSet pic;

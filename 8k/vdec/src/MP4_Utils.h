@@ -152,6 +152,9 @@ class MP4_Utils {
    uint16 m_SrcWidth, m_SrcHeight;   // Dimensions of the source clip
    bool validate_profile_and_level(uint32 profile_and_level_indication);
 
+   bool m_default_profile_chk;
+   bool m_default_level_chk;
+
       public:
 
     uint16 SrcWidth(void) const {
