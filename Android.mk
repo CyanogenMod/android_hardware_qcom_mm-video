@@ -29,7 +29,7 @@
 OMX_VIDEO_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
-ifdef BOARD_USES_QCOM_8x_CHIPSET
+ifeq ($(TARGET_BOARD_PLATFORM), qsd8k)
     include $(OMX_VIDEO_PATH)/8k/vdec/Android.mk
 endif
 
