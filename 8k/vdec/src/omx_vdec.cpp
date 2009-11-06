@@ -43,6 +43,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define DEBUG_ON 0
 #include "qtv_msg.h"
 #include <string.h>
+#include "cutils/properties.h"
 #include "adsp.h"
 #include "omx_vdec.h"
 #include "MP4_Utils.h"
@@ -277,6 +278,9 @@ m_platform_entry(NULL),
 m_pmem_info(NULL),
 m_h264_utils(NULL),
 m_pcurrent_frame(NULL),
+m_default_arbitrary_bytes(true),
+m_default_arbitrary_bytes_vc1(true),
+m_default_accumulate_subframe(true),
 m_bAccumulate_subframe(false),
 m_bArbitraryBytes(true),
 m_arbitrary_bytes_input_mem_ptr(NULL),
@@ -989,6 +993,7 @@ RETURN VALUE
 OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
 {
 
+   char property_value[PROPERTY_VALUE_MAX] = {0};
    OMX_ERRORTYPE eRet = OMX_ErrorNone;
    int r;
 
@@ -1008,6 +1013,45 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
    }
    adsp_close(mod);
 #endif
+
+   if(0 != property_get("persist.omxvideo.arb-bytes", property_value, NULL))
+   {
+       if(!strcmp(property_value, "false"))
+       {
+           m_default_arbitrary_bytes = false;
+       }
+   }
+   else
+   {
+       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR, "OMX_VDEC:: Comp Init failed in \
+           getting value for the Android property [persist.omxvideo.arb-bytes]");
+   }
+
+   if(0 != property_get("persist.omxvideo.arb-bytes-vc1", property_value, NULL))
+   {
+       if(!strcmp(property_value, "false"))
+       {
+           m_default_arbitrary_bytes_vc1 = false;
+       }
+   }
+   else
+   {
+       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR, "OMX_VDEC:: Comp Init failed in \
+           getting value for the Android property [persist.omxvideo.arb-bytes-vc1]");
+   }
+
+   if(0 != property_get("persist.omxvideo.accsubframe", property_value, NULL))
+   {
+       if(!strcmp(property_value, "false"))
+       {
+           m_default_accumulate_subframe = false;
+       }
+   }
+   else
+   {
+       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR, "OMX_VDEC:: Comp Init failed in \
+           getting value for the Android property [persist.omxvideo.accsubframe]");
+   }
 
    m_vdec_cfg.buffer_done = buffer_done_cb_stub;
    m_vdec_cfg.frame_done = frame_done_cb_stub;
@@ -1058,6 +1102,7 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
          0) {
       m_h264_utils = new H264_Utils();
       m_bAccumulate_subframe = true;   // by default
+      m_bAccumulate_subframe = (m_bAccumulate_subframe && m_default_accumulate_subframe);
       m_out_buf_count = OMX_CORE_NUM_OUTPUT_BUFFERS_H264;
       m_outstanding_frames = -OMX_CORE_NUM_OUTPUT_BUFFERS_H264;
    } else if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.vc1", 26) ==
@@ -1068,6 +1113,16 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
       m_outstanding_frames = -OMX_CORE_NUM_OUTPUT_BUFFERS_VC1;
       m_bAccumulate_subframe = true;
       m_bArbitraryBytes =  false;
+      m_bAccumulate_subframe = (m_bAccumulate_subframe && m_default_accumulate_subframe);
+   }
+
+   if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.vc1", 26) == 0)
+   {
+       m_bArbitraryBytes = (m_bArbitraryBytes && m_default_arbitrary_bytes_vc1);
+   }
+   else
+   {
+       m_bArbitraryBytes = (m_bArbitraryBytes && m_default_arbitrary_bytes);
    }
 
    m_crop_dy = m_height = m_vdec_cfg.height;

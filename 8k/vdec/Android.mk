@@ -60,7 +60,7 @@ LOCAL_MODULE            := libOmxVdec
 LOCAL_CFLAGS            := $(libOmxVdec-def)
 LOCAL_C_INCLUDES        := $(libOmxVdec-inc)
 LOCAL_PRELINK_MODULE    := false
-LOCAL_SHARED_LIBRARIES  := libutils liblog libbinder
+LOCAL_SHARED_LIBRARIES  := libutils liblog libbinder libcutils
 
 LOCAL_SRC_FILES         := src/adsp.c
 LOCAL_SRC_FILES         += src/pmem.c
@@ -75,7 +75,7 @@ LOCAL_SRC_FILES         += src/H264_Utils.cpp
 include $(BUILD_SHARED_LIBRARY)
 
 # ---------------------------------------------------------------------------------
-#          Make the apps-test (mm-adec-omxaac-test)
+#          Make the apps-test (mm-vdec-omx-test)
 # ---------------------------------------------------------------------------------
 
 include $(CLEAR_VARS)
@@ -92,6 +92,24 @@ LOCAL_SHARED_LIBRARIES  := libmm-omxcore libOmxVdec libbinder
 
 LOCAL_SRC_FILES         := test/omx_vdec_test.cpp
 LOCAL_SRC_FILES         += test/queue.c
+
+include $(BUILD_EXECUTABLE)
+
+# ---------------------------------------------------------------------------------
+#          Make the vdec-property-mgr (mm-vdec-omx-property-mgr)
+# ---------------------------------------------------------------------------------
+
+include $(CLEAR_VARS)
+
+mm-vdec-property-mgr-inc        := $(LOCAL_PATH)
+
+LOCAL_MODULE            := mm-vdec-omx-property-mgr
+LOCAL_CFLAGS            := $(libOmxVdec-def)
+LOCAL_C_INCLUDES        := $(mm-vdec-property-mgr-inc)
+LOCAL_PRELINK_MODULE    := false
+LOCAL_SHARED_LIBRARIES  := libcutils
+
+LOCAL_SRC_FILES         := test/omx_vdec_property_mgr.cpp
 
 include $(BUILD_EXECUTABLE)
 

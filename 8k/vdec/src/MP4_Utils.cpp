@@ -28,6 +28,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "MP4_Utils.h"
 #include "omx_vdec.h"
 # include <stdio.h>
+#include "cutils/properties.h"
 
 
 /* -----------------------------------------------------------------------
@@ -51,8 +52,40 @@ RETURN VALUE:
 ===========================================================================*/
 MP4_Utils::MP4_Utils()
 {
+   char property_value[PROPERTY_VALUE_MAX] = {0};
+
    m_SrcWidth = 0;
    m_SrcHeight = 0;
+   m_default_profile_chk = true;
+   m_default_level_chk = true;
+
+   if(0 != property_get("persist.omxvideo.profilecheck", property_value, NULL))
+   {
+       if(!strcmp(property_value, "false"))
+       {
+           m_default_profile_chk = false;
+       }
+   }
+   else
+   {
+       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR, "MP4_Utils:: Constr failed in \
+           getting value for the Android property [persist.omxvideo.profilecheck]");
+   }
+
+   if(0 != property_get("persist.omxvideo.levelcheck", property_value, NULL))
+   {
+       if(!strcmp(property_value, "false"))
+       {
+           m_default_level_chk = false;
+       }
+   }
+   else
+   {
+       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR, "MP4_Utils:: Constr failed in \
+           getting value for the Android property [persist.omxvideo.levelcheck]");
+   }
+
+
 }
 
 /* <EJECT> */
@@ -638,7 +671,8 @@ bool MP4_Utils::validate_profile_and_level(uint32 profile_and_level_indication)
    QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
             "MP4 profile and level %d\n",
             profile_and_level_indication);
-   if ((profile_and_level_indication != SIMPLE_PROFILE_LEVEL0)
+   if ((m_default_profile_chk && m_default_level_chk)
+       && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL0)
        && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL1)
        && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL2)
        && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL3)

@@ -632,6 +632,11 @@ class omx_vdec:public qc_omx_component, public omx_vdec_inpbuf {
    OMX_BOOL m_out_bEnabled;
    OMX_U8 m_cRole[OMX_MAX_STRINGNAME_SIZE];
 
+   // default members for pre-defined system properties
+   bool m_default_arbitrary_bytes;
+   bool m_default_arbitrary_bytes_vc1;
+   bool m_default_accumulate_subframe;
+
    // to know whether Event Port Settings change has been triggered or not.
    bool m_event_port_settings_sent;
    // is USE Buffer in use

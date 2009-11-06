@@ -49,6 +49,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "omx_vdec.h"
 #include <string.h>
 #include <stdlib.h>
+#include "cutils/properties.h"
 #include "qtv_msg.h"
 
 /* =======================================================================
@@ -162,8 +163,36 @@ void H264_Utils::allocate_rbsp_buffer(uint32 inputBufferSize)
    m_prv_nalu.nalu_type = NALU_TYPE_UNSPECIFIED;
 }
 
-H264_Utils::H264_Utils():m_height(0), m_width(0), m_rbspBytes(NULL)
+H264_Utils::H264_Utils():m_height(0), m_width(0), m_rbspBytes(NULL),
+    m_default_profile_chk(true), m_default_level_chk(true)
 {
+   char property_value[PROPERTY_VALUE_MAX] = {0};
+   if(0 != property_get("persist.omxvideo.profilecheck", property_value, NULL))
+   {
+       if(!strcmp(property_value, "false"))
+       {
+           m_default_profile_chk = false;
+       }
+   }
+   else
+   {
+       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR, "H264_Utils:: Constr failed in \
+           getting value for the Android property [persist.omxvideo.profilecheck]");
+   }
+
+   if(0 != property_get("persist.omxvideo.levelcheck", property_value, NULL))
+   {
+       if(!strcmp(property_value, "false"))
+       {
+           m_default_level_chk = false;
+       }
+   }
+   else
+   {
+       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR, "H264_Utils:: Constr failed in \
+           getting value for the Android property [persist.omxvideo.levelcheck]");
+   }
+
    initialize_frame_checking_environment();
 }
 
@@ -1533,17 +1562,21 @@ bool H264_Utils::validate_profile_and_level(uint32 profile, uint32 level)
    long hxw = 0;
 
    /* 7k will support baseline profile only */
-   if ((profile != BASELINE_PROFILE &&
+   if ((m_default_profile_chk &&
+        profile != BASELINE_PROFILE &&
         profile != MAIN_PROFILE &&
-        profile != HIGH_PROFILE) || (level > MAX_SUPPORTED_LEVEL)
+        profile != HIGH_PROFILE) || (m_default_level_chk && level > MAX_SUPPORTED_LEVEL)
        ) {
       return false;
    }
 
-   hxw = m_height * m_width;
-   if ((profile == MAIN_PROFILE || profile == HIGH_PROFILE) &&
-       (hxw >= (OMX_CORE_720P_HEIGHT * OMX_CORE_720P_WIDTH))) {
-      return false;
+   if(m_default_profile_chk)
+   {
+       hxw = m_height * m_width;
+       if ((profile == MAIN_PROFILE || profile == HIGH_PROFILE) &&
+           (hxw >= (OMX_CORE_720P_HEIGHT * OMX_CORE_720P_WIDTH))) {
+           return false;
+       }
    }
 
    return true;
