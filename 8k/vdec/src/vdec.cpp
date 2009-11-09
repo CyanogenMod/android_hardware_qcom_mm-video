@@ -840,10 +840,11 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
 
    return dec;
 
-      fail_open:
+fail_initialize:
    adsp_close((struct adsp_module *)dec->adsp_module);
-      fail_initialize:
+fail_open:
    free(dec);
+   free(pthread_info);
    return 0;
 }
 

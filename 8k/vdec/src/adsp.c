@@ -193,6 +193,11 @@ void adsp_close(struct adsp_module *mod)
 #ifndef T_WINNT
    int ret;
    int thread_ret = 0;
+   if (NULL == mod) {
+      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+               "adsp_close() mod NULL: 0x%x\n", mod);
+      return ;
+   }
 
    mod->dead = 1;
 
