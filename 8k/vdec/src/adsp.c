@@ -92,11 +92,11 @@ void convertFrameInfoToFrameDetails(struct Vdec_FrameDetailsType *Frame_details,
    Frame_details->timestamp =
        (unsigned long long)((unsigned long long)pFrame->
              timestamp_hi << 32 | (unsigned long long)
-             pFrame->timestamp_lo);
+             pFrame->timestamp_lo & 0x0FFFFFFFFLL);
    Frame_details->calculatedTimeStamp =
        (unsigned long long)((unsigned long long)pFrame->
              cal_timestamp_hi << 32 | (unsigned long long)
-             pFrame->cal_timestamp_lo);
+             pFrame->cal_timestamp_lo & 0x0FFFFFFFFLL);
    Frame_details->nDecPicWidth = pFrame->dec_width;
    Frame_details->nDecPicHeight = pFrame->dec_height;
    Frame_details->cwin.x1 = pFrame->cwin.x1;

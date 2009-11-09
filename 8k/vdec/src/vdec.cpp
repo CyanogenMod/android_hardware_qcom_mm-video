@@ -985,8 +985,8 @@ Vdec_ReturnType vdec_post_input_buffer(struct VDecoder * dec,
    //input.avsync_state
 
    QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
-            "vdec: received ts: %d",
-            (int)(frame->timestamp & 0xFFFFFF));
+            "vdec: received ts: %lld",
+            frame->timestamp);
    if (frame->timestamp < timestamp) {
       QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                "vdec: error: out of order stamp! %d < %d\n",
