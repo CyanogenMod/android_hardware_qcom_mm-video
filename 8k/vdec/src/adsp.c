@@ -357,6 +357,7 @@ int adsp_set_buffers(struct adsp_module *mod, struct adsp_buffer_info bufinfo)
    if (ioctl(mod->fd, VDEC_IOCTL_SETBUFFERS, &mem) < 0) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "VDEC_IOCTL_SETBUFFERS failed\n");
+      mod->dead = 1;
       return -1;
    }
 
@@ -426,6 +427,7 @@ int adsp_init(struct adsp_module *mod, struct adsp_init *init)
    if (ioctl(mod->fd, VDEC_IOCTL_INITIALIZE, &vi) < 0) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "VDEC_IOCTL_INITIALIZE failed\n");
+      mod->dead = 1;
       return -1;
    }
    init->buf_req->input.bufnum_min = vi.buf_req->input.num_min_buffers;
