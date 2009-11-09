@@ -2355,7 +2355,72 @@ OMX_ERRORTYPE omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE hComp,
 
          break;
       }
+   case OMX_IndexParamVideoProfileLevelQuerySupported:
+      {
+          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "get_parameter: OMX_IndexParamVideoProfileLevelQuerySupported %08x\n",
+                  paramIndex);
+          OMX_VIDEO_PARAM_PROFILELEVELTYPE *profileLevelType =
+             (OMX_VIDEO_PARAM_PROFILELEVELTYPE *)paramData;
+          if(profileLevelType->nPortIndex == 0) {
+             if (!strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.avc",OMX_MAX_STRINGNAME_SIZE))
+             {
+                if (profileLevelType->nProfileIndex == 0)
+                {
+                   profileLevelType->eProfile = OMX_VIDEO_AVCProfileBaseline;
+                   profileLevelType->eLevel   = OMX_VIDEO_AVCLevel31;
+                }
+                else
+                {
+                   QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "get_parameter: OMX_IndexParamVideoProfileLevelQuerySupported nProfileIndex ret NoMore %d\n",
+                  profileLevelType->nProfileIndex);
+                   eRet = OMX_ErrorNoMore;
 
+                }
+             }
+             else if((!strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.h263",OMX_MAX_STRINGNAME_SIZE)))
+             {
+                if (profileLevelType->nProfileIndex == 0)
+                {
+                   profileLevelType->eProfile = OMX_VIDEO_H263ProfileBaseline;
+                   profileLevelType->eLevel   = OMX_VIDEO_H263Level60;
+                }
+                else
+                {
+                   QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "get_parameter: OMX_IndexParamVideoProfileLevelQuerySupported nProfileIndex ret NoMore %d\n",
+                  profileLevelType->nProfileIndex);
+                   eRet = OMX_ErrorNoMore;
+
+                }
+             }
+             else if (!strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.mpeg4",OMX_MAX_STRINGNAME_SIZE))
+             {
+                if (profileLevelType->nProfileIndex == 0)
+                {
+                   profileLevelType->eProfile = OMX_VIDEO_MPEG4ProfileSimple;
+                   profileLevelType->eLevel   = OMX_VIDEO_MPEG4Level4a;
+                }
+                else
+                {
+                   QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "get_parameter: OMX_IndexParamVideoProfileLevelQuerySupported nProfileIndex ret NoMore %d\n",
+                  profileLevelType->nProfileIndex);
+                   eRet = OMX_ErrorNoMore;
+
+                }
+            }
+          }
+          else
+          {
+             QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+            "get_parameter: OMX_IndexParamVideoProfileLevelQuerySupported should be queries on Input port only %d\n",
+            profileLevelType->nPortIndex);
+            eRet = OMX_ErrorBadPortIndex;
+          }
+        break;
+      }
    default:
       {
          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
