@@ -110,6 +110,11 @@ typedef unsigned char byte;   /* Unsigned 8  bit value type. */
 #define SIMPLE_PROFILE_LEVEL3            0x03
 #define SIMPLE_PROFILE_LEVEL4A            0x04
 
+#define SIMPLE_SCALABLE_PROFILE_LEVEL0                  0x10
+#define SIMPLE_SCALABLE_PROFILE_LEVEL1                  0x11
+#define SIMPLE_SCALABLE_PROFILE_LEVEL2                  0x12
+
+
 #define MP4ERROR_SUCCESS     0
 
 #define VIDEO_OBJECT_LAYER_START_CODE_MASK  0xFFFFFFF0

@@ -676,7 +676,10 @@ bool MP4_Utils::validate_profile_and_level(uint32 profile_and_level_indication)
        && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL1)
        && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL2)
        && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL3)
-       && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL4A)) {
+       && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL4A)
+       && (profile_and_level_indication != SIMPLE_SCALABLE_PROFILE_LEVEL0)
+       && (profile_and_level_indication != SIMPLE_SCALABLE_PROFILE_LEVEL1)
+       && (profile_and_level_indication != SIMPLE_SCALABLE_PROFILE_LEVEL2)) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_FATAL,
               "Caution: INVALID_PROFILE_AND_LEVEL \n");
       return false;
