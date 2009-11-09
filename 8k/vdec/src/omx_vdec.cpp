@@ -337,14 +337,6 @@ omx_vdec::~omx_vdec()
    m_nalu_bytes = 0;
    m_port_width = m_port_height = 0;
 
-   if (m_bArbitraryBytes) {
-      for (int i = 0; i < OMX_CORE_NUM_INPUT_BUFFERS; i++) {
-         if (m_extra_buf_info[i].extra_pBuffer) {
-            free(m_extra_buf_info[i].extra_pBuffer);
-            m_extra_buf_info[i].extra_pBuffer = NULL;
-         }
-      }
-   }
    if (flush_before_vdec_op_q) {
       delete flush_before_vdec_op_q;
       flush_before_vdec_op_q = NULL;
@@ -5930,10 +5922,67 @@ RETURN VALUE
 
 ========================================================================== */
 OMX_ERRORTYPE omx_vdec::component_deinit(OMX_IN OMX_HANDLETYPE hComp) {
+
+   OMX_BUFFERHEADERTYPE *bufferHdr = NULL;
+   int i;
    if (OMX_StateLoaded != m_state) {
       QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
                "WARNING:Rxd DeInit,OMX not in LOADED state %d\n",
                m_state);
+      for(i =0; i <m_inp_buf_count; i++ ) {
+         if(m_bArbitraryBytes && m_arbitrary_bytes_input_mem_ptr) {
+               bufferHdr =
+                 ((OMX_BUFFERHEADERTYPE *)m_arbitrary_bytes_input_mem_ptr) + i;
+          }
+          else if (m_inp_mem_ptr) {
+               bufferHdr =
+                 ((OMX_BUFFERHEADERTYPE *)m_inp_mem_ptr) + i;
+          }
+          if(bufferHdr && bufferHdr->pBuffer) {
+             Vdec_BufferInfo buf_info;
+             buf_info.base = bufferHdr->pBuffer;
+             if (m_use_pmem) {
+               buf_info.bufferSize =
+                     m_vdec_cfg.inputBuffer[i].bufferSize;
+               buf_info.pmem_id =
+                     m_vdec_cfg.inputBuffer[i].pmem_id;
+               buf_info.pmem_offset =
+                      m_vdec_cfg.inputBuffer[i].pmem_offset;
+             }
+
+             QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                 "free_buffer on i/p port - pBuffer %x \n",
+                 bufferHdr->pBuffer);
+             vdec_free_input_buffer(&buf_info, m_use_pmem);
+         }
+
+      }
+   }
+   if (m_bArbitraryBytes) {
+      for (i = 0; i < OMX_CORE_NUM_INPUT_BUFFERS; i++) {
+         if (m_extra_buf_info[i].extra_pBuffer) {
+             Vdec_BufferInfo buf_info;
+             buf_info.base =
+                m_extra_buf_info[i].extra_pBuffer;
+            if (m_use_pmem) {
+               buf_info.bufferSize =
+                   m_vdec_cfg.
+                   inputBuffer[m_inp_buf_count +
+                     i].bufferSize;
+               buf_info.pmem_id =
+                   m_vdec_cfg.
+                   inputBuffer[m_inp_buf_count +
+                     i].pmem_id;
+               buf_info.pmem_offset =
+                   m_vdec_cfg.
+                   inputBuffer[m_inp_buf_count +
+                     i].pmem_offset;
+            }
+            //free(m_extra_buf_info[nPortIndex].extra_pBuffer);
+            vdec_free_input_buffer(&buf_info, m_use_pmem);
+            m_extra_buf_info[i].extra_pBuffer = NULL;
+         }
+       }
    }
 
    if (m_vdec) {
