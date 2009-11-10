@@ -272,6 +272,7 @@ m_inp_bEnabled(OMX_TRUE),
 m_out_bEnabled(OMX_TRUE),
 m_event_port_settings_sent(false),
 m_is_use_buffer(false),
+m_is_input_use_buffer(false),
 m_bEoSNotifyPending(false),
 m_platform_list(NULL),
 m_platform_entry(NULL),
@@ -3220,6 +3221,7 @@ OMX_ERRORTYPE omx_vdec::use_input_buffer(OMX_IN OMX_HANDLETYPE hComp,
                       arbitrarybytesInput = NULL;
                }
             }
+            omx_vdec_set_input_use_buf_flg();
          } else {
             QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                     "Input buffer memory allocation failed\n");
@@ -4306,6 +4308,10 @@ OMX_ERRORTYPE omx_vdec::free_buffer(OMX_IN OMX_HANDLETYPE hComp,
              (OMX_BUFFERHEADERTYPE *)
              m_arbitrary_bytes_input_mem_ptr;
          if (m_extra_buf_info[nPortIndex].extra_pBuffer != NULL) {
+            if (omx_vdec_get_input_use_buf_flg()) {
+              free(m_extra_buf_info[nPortIndex].extra_pBuffer);
+            }
+            else {
             Vdec_BufferInfo buf_info;
             buf_info.base =
                 m_extra_buf_info[nPortIndex].extra_pBuffer;
@@ -4325,6 +4331,7 @@ OMX_ERRORTYPE omx_vdec::free_buffer(OMX_IN OMX_HANDLETYPE hComp,
             }
             //free(m_extra_buf_info[nPortIndex].extra_pBuffer);
             vdec_free_input_buffer(&buf_info, m_use_pmem);
+            }
             m_extra_buf_info[nPortIndex].extra_pBuffer =
                 NULL;
          }
@@ -4337,6 +4344,12 @@ OMX_ERRORTYPE omx_vdec::free_buffer(OMX_IN OMX_HANDLETYPE hComp,
                "free_buffer on i/p port - Port idx %d \n",
                nPortIndex);
       if (nPortIndex < m_inp_buf_count) {
+         if(omx_vdec_get_input_use_buf_flg()) {
+             QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "free_buffer on i/p port - use buffer so do not free pBuffer %x \n",
+                  buffer->pBuffer);
+         }
+         else{
          Vdec_BufferInfo buf_info;
          buf_info.base = buffer->pBuffer;
          if (m_use_pmem) {
@@ -4357,6 +4370,7 @@ OMX_ERRORTYPE omx_vdec::free_buffer(OMX_IN OMX_HANDLETYPE hComp,
                   "free_buffer on i/p port - pBuffer %x \n",
                   buffer->pBuffer);
          vdec_free_input_buffer(&buf_info, m_use_pmem);
+         }
 
          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                   "free_buffer on i/p port - before Clear bitmask %x \n",
@@ -4391,6 +4405,11 @@ OMX_ERRORTYPE omx_vdec::free_buffer(OMX_IN OMX_HANDLETYPE hComp,
          post_event(OMX_CommandPortDisable,
                OMX_CORE_INPUT_PORT_INDEX,
                OMX_COMPONENT_GENERATE_EVENT);
+      }
+      if (omx_vdec_get_input_use_buf_flg() && release_input_done()) {
+         QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                 "Resetting use_buf flag\n");
+         omx_vdec_reset_input_use_buf_flg();
       }
    } else if (port == OMX_CORE_OUTPUT_PORT_INDEX) {
       // check if the buffer is valid
@@ -5938,7 +5957,7 @@ OMX_ERRORTYPE omx_vdec::component_deinit(OMX_IN OMX_HANDLETYPE hComp) {
                bufferHdr =
                  ((OMX_BUFFERHEADERTYPE *)m_inp_mem_ptr) + i;
           }
-          if(bufferHdr && bufferHdr->pBuffer) {
+          if(bufferHdr && bufferHdr->pBuffer && !omx_vdec_get_input_use_buf_flg()) {
              Vdec_BufferInfo buf_info;
              buf_info.base = bufferHdr->pBuffer;
              if (m_use_pmem) {
@@ -5961,6 +5980,10 @@ OMX_ERRORTYPE omx_vdec::component_deinit(OMX_IN OMX_HANDLETYPE hComp) {
    if (m_bArbitraryBytes) {
       for (i = 0; i < OMX_CORE_NUM_INPUT_BUFFERS; i++) {
          if (m_extra_buf_info[i].extra_pBuffer) {
+            if(omx_vdec_get_input_use_buf_flg()) {
+                free(m_extra_buf_info[i].extra_pBuffer);
+            }
+            else {
              Vdec_BufferInfo buf_info;
              buf_info.base =
                 m_extra_buf_info[i].extra_pBuffer;
@@ -5980,6 +6003,7 @@ OMX_ERRORTYPE omx_vdec::component_deinit(OMX_IN OMX_HANDLETYPE hComp) {
             }
             //free(m_extra_buf_info[nPortIndex].extra_pBuffer);
             vdec_free_input_buffer(&buf_info, m_use_pmem);
+            }
             m_extra_buf_info[i].extra_pBuffer = NULL;
          }
        }
