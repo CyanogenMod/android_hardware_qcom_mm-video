@@ -92,11 +92,11 @@ void convertFrameInfoToFrameDetails(struct Vdec_FrameDetailsType *Frame_details,
    Frame_details->timestamp =
        (unsigned long long)((unsigned long long)pFrame->
              timestamp_hi << 32 | (unsigned long long)
-             pFrame->timestamp_lo);
+             pFrame->timestamp_lo & 0x0FFFFFFFFLL);
    Frame_details->calculatedTimeStamp =
        (unsigned long long)((unsigned long long)pFrame->
              cal_timestamp_hi << 32 | (unsigned long long)
-             pFrame->cal_timestamp_lo);
+             pFrame->cal_timestamp_lo & 0x0FFFFFFFFLL);
    Frame_details->nDecPicWidth = pFrame->dec_width;
    Frame_details->nDecPicHeight = pFrame->dec_height;
    Frame_details->cwin.x1 = pFrame->cwin.x1;
@@ -193,6 +193,11 @@ void adsp_close(struct adsp_module *mod)
 #ifndef T_WINNT
    int ret;
    int thread_ret = 0;
+   if (NULL == mod) {
+      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+               "adsp_close() mod NULL: 0x%x\n", mod);
+      return ;
+   }
 
    mod->dead = 1;
 
@@ -352,6 +357,7 @@ int adsp_set_buffers(struct adsp_module *mod, struct adsp_buffer_info bufinfo)
    if (ioctl(mod->fd, VDEC_IOCTL_SETBUFFERS, &mem) < 0) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "VDEC_IOCTL_SETBUFFERS failed\n");
+      mod->dead = 1;
       return -1;
    }
 
@@ -421,6 +427,7 @@ int adsp_init(struct adsp_module *mod, struct adsp_init *init)
    if (ioctl(mod->fd, VDEC_IOCTL_INITIALIZE, &vi) < 0) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "VDEC_IOCTL_INITIALIZE failed\n");
+      mod->dead = 1;
       return -1;
    }
    init->buf_req->input.bufnum_min = vi.buf_req->input.num_min_buffers;

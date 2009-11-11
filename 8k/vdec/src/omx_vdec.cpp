@@ -272,6 +272,7 @@ m_inp_bEnabled(OMX_TRUE),
 m_out_bEnabled(OMX_TRUE),
 m_event_port_settings_sent(false),
 m_is_use_buffer(false),
+m_is_input_use_buffer(false),
 m_bEoSNotifyPending(false),
 m_platform_list(NULL),
 m_platform_entry(NULL),
@@ -337,14 +338,6 @@ omx_vdec::~omx_vdec()
    m_nalu_bytes = 0;
    m_port_width = m_port_height = 0;
 
-   if (m_bArbitraryBytes) {
-      for (int i = 0; i < OMX_CORE_NUM_INPUT_BUFFERS; i++) {
-         if (m_extra_buf_info[i].extra_pBuffer) {
-            free(m_extra_buf_info[i].extra_pBuffer);
-            m_extra_buf_info[i].extra_pBuffer = NULL;
-         }
-      }
-   }
    if (flush_before_vdec_op_q) {
       delete flush_before_vdec_op_q;
       flush_before_vdec_op_q = NULL;
@@ -2362,7 +2355,72 @@ OMX_ERRORTYPE omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE hComp,
 
          break;
       }
+   case OMX_IndexParamVideoProfileLevelQuerySupported:
+      {
+          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "get_parameter: OMX_IndexParamVideoProfileLevelQuerySupported %08x\n",
+                  paramIndex);
+          OMX_VIDEO_PARAM_PROFILELEVELTYPE *profileLevelType =
+             (OMX_VIDEO_PARAM_PROFILELEVELTYPE *)paramData;
+          if(profileLevelType->nPortIndex == 0) {
+             if (!strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.avc",OMX_MAX_STRINGNAME_SIZE))
+             {
+                if (profileLevelType->nProfileIndex == 0)
+                {
+                   profileLevelType->eProfile = OMX_VIDEO_AVCProfileBaseline;
+                   profileLevelType->eLevel   = OMX_VIDEO_AVCLevel31;
+                }
+                else
+                {
+                   QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "get_parameter: OMX_IndexParamVideoProfileLevelQuerySupported nProfileIndex ret NoMore %d\n",
+                  profileLevelType->nProfileIndex);
+                   eRet = OMX_ErrorNoMore;
 
+                }
+             }
+             else if((!strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.h263",OMX_MAX_STRINGNAME_SIZE)))
+             {
+                if (profileLevelType->nProfileIndex == 0)
+                {
+                   profileLevelType->eProfile = OMX_VIDEO_H263ProfileBaseline;
+                   profileLevelType->eLevel   = OMX_VIDEO_H263Level60;
+                }
+                else
+                {
+                   QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "get_parameter: OMX_IndexParamVideoProfileLevelQuerySupported nProfileIndex ret NoMore %d\n",
+                  profileLevelType->nProfileIndex);
+                   eRet = OMX_ErrorNoMore;
+
+                }
+             }
+             else if (!strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.mpeg4",OMX_MAX_STRINGNAME_SIZE))
+             {
+                if (profileLevelType->nProfileIndex == 0)
+                {
+                   profileLevelType->eProfile = OMX_VIDEO_MPEG4ProfileSimple;
+                   profileLevelType->eLevel   = OMX_VIDEO_MPEG4Level4a;
+                }
+                else
+                {
+                   QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "get_parameter: OMX_IndexParamVideoProfileLevelQuerySupported nProfileIndex ret NoMore %d\n",
+                  profileLevelType->nProfileIndex);
+                   eRet = OMX_ErrorNoMore;
+
+                }
+            }
+          }
+          else
+          {
+             QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+            "get_parameter: OMX_IndexParamVideoProfileLevelQuerySupported should be queries on Input port only %d\n",
+            profileLevelType->nPortIndex);
+            eRet = OMX_ErrorBadPortIndex;
+          }
+        break;
+      }
    default:
       {
          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
@@ -3228,6 +3286,7 @@ OMX_ERRORTYPE omx_vdec::use_input_buffer(OMX_IN OMX_HANDLETYPE hComp,
                       arbitrarybytesInput = NULL;
                }
             }
+            omx_vdec_set_input_use_buf_flg();
          } else {
             QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                     "Input buffer memory allocation failed\n");
@@ -4314,6 +4373,10 @@ OMX_ERRORTYPE omx_vdec::free_buffer(OMX_IN OMX_HANDLETYPE hComp,
              (OMX_BUFFERHEADERTYPE *)
              m_arbitrary_bytes_input_mem_ptr;
          if (m_extra_buf_info[nPortIndex].extra_pBuffer != NULL) {
+            if (omx_vdec_get_input_use_buf_flg()) {
+              free(m_extra_buf_info[nPortIndex].extra_pBuffer);
+            }
+            else {
             Vdec_BufferInfo buf_info;
             buf_info.base =
                 m_extra_buf_info[nPortIndex].extra_pBuffer;
@@ -4333,6 +4396,7 @@ OMX_ERRORTYPE omx_vdec::free_buffer(OMX_IN OMX_HANDLETYPE hComp,
             }
             //free(m_extra_buf_info[nPortIndex].extra_pBuffer);
             vdec_free_input_buffer(&buf_info, m_use_pmem);
+            }
             m_extra_buf_info[nPortIndex].extra_pBuffer =
                 NULL;
          }
@@ -4345,6 +4409,12 @@ OMX_ERRORTYPE omx_vdec::free_buffer(OMX_IN OMX_HANDLETYPE hComp,
                "free_buffer on i/p port - Port idx %d \n",
                nPortIndex);
       if (nPortIndex < m_inp_buf_count) {
+         if(omx_vdec_get_input_use_buf_flg()) {
+             QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "free_buffer on i/p port - use buffer so do not free pBuffer %x \n",
+                  buffer->pBuffer);
+         }
+         else{
          Vdec_BufferInfo buf_info;
          buf_info.base = buffer->pBuffer;
          if (m_use_pmem) {
@@ -4365,6 +4435,7 @@ OMX_ERRORTYPE omx_vdec::free_buffer(OMX_IN OMX_HANDLETYPE hComp,
                   "free_buffer on i/p port - pBuffer %x \n",
                   buffer->pBuffer);
          vdec_free_input_buffer(&buf_info, m_use_pmem);
+         }
 
          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                   "free_buffer on i/p port - before Clear bitmask %x \n",
@@ -4399,6 +4470,11 @@ OMX_ERRORTYPE omx_vdec::free_buffer(OMX_IN OMX_HANDLETYPE hComp,
          post_event(OMX_CommandPortDisable,
                OMX_CORE_INPUT_PORT_INDEX,
                OMX_COMPONENT_GENERATE_EVENT);
+      }
+      if (omx_vdec_get_input_use_buf_flg() && release_input_done()) {
+         QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                 "Resetting use_buf flag\n");
+         omx_vdec_reset_input_use_buf_flg();
       }
    } else if (port == OMX_CORE_OUTPUT_PORT_INDEX) {
       // check if the buffer is valid
@@ -5930,10 +6006,72 @@ RETURN VALUE
 
 ========================================================================== */
 OMX_ERRORTYPE omx_vdec::component_deinit(OMX_IN OMX_HANDLETYPE hComp) {
+
+   OMX_BUFFERHEADERTYPE *bufferHdr = NULL;
+   int i;
    if (OMX_StateLoaded != m_state) {
       QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
                "WARNING:Rxd DeInit,OMX not in LOADED state %d\n",
                m_state);
+      for(i =0; i <m_inp_buf_count; i++ ) {
+         if(m_bArbitraryBytes && m_arbitrary_bytes_input_mem_ptr) {
+               bufferHdr =
+                 ((OMX_BUFFERHEADERTYPE *)m_arbitrary_bytes_input_mem_ptr) + i;
+          }
+          else if (m_inp_mem_ptr) {
+               bufferHdr =
+                 ((OMX_BUFFERHEADERTYPE *)m_inp_mem_ptr) + i;
+          }
+          if(bufferHdr && bufferHdr->pBuffer && !omx_vdec_get_input_use_buf_flg()) {
+             Vdec_BufferInfo buf_info;
+             buf_info.base = bufferHdr->pBuffer;
+             if (m_use_pmem) {
+               buf_info.bufferSize =
+                     m_vdec_cfg.inputBuffer[i].bufferSize;
+               buf_info.pmem_id =
+                     m_vdec_cfg.inputBuffer[i].pmem_id;
+               buf_info.pmem_offset =
+                      m_vdec_cfg.inputBuffer[i].pmem_offset;
+             }
+
+             QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                 "free_buffer on i/p port - pBuffer %x \n",
+                 bufferHdr->pBuffer);
+             vdec_free_input_buffer(&buf_info, m_use_pmem);
+         }
+
+      }
+   }
+   if (m_bArbitraryBytes) {
+      for (i = 0; i < OMX_CORE_NUM_INPUT_BUFFERS; i++) {
+         if (m_extra_buf_info[i].extra_pBuffer) {
+            if(omx_vdec_get_input_use_buf_flg()) {
+                free(m_extra_buf_info[i].extra_pBuffer);
+            }
+            else {
+             Vdec_BufferInfo buf_info;
+             buf_info.base =
+                m_extra_buf_info[i].extra_pBuffer;
+            if (m_use_pmem) {
+               buf_info.bufferSize =
+                   m_vdec_cfg.
+                   inputBuffer[m_inp_buf_count +
+                     i].bufferSize;
+               buf_info.pmem_id =
+                   m_vdec_cfg.
+                   inputBuffer[m_inp_buf_count +
+                     i].pmem_id;
+               buf_info.pmem_offset =
+                   m_vdec_cfg.
+                   inputBuffer[m_inp_buf_count +
+                     i].pmem_offset;
+            }
+            //free(m_extra_buf_info[nPortIndex].extra_pBuffer);
+            vdec_free_input_buffer(&buf_info, m_use_pmem);
+            }
+            m_extra_buf_info[i].extra_pBuffer = NULL;
+         }
+       }
    }
 
    if (m_vdec) {

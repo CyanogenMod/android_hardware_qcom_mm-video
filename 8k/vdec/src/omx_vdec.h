@@ -449,6 +449,15 @@ class omx_vdec:public qc_omx_component, public omx_vdec_inpbuf {
    inline bool omx_vdec_get_use_buf_flg() {
       return m_is_use_buffer;
    }
+   inline void omx_vdec_set_input_use_buf_flg() {
+      m_is_input_use_buffer = true;
+   }
+   inline void omx_vdec_reset_input_use_buf_flg() {
+      m_is_input_use_buffer = false;
+   }
+   inline bool omx_vdec_get_input_use_buf_flg() {
+      return m_is_input_use_buffer;
+   }
    bool post_event(unsigned int p1, unsigned int p2, unsigned int id);
 
    static void buffer_done_cb_arbitrarybytes(struct vdec_context *ctxt,
@@ -641,6 +650,7 @@ class omx_vdec:public qc_omx_component, public omx_vdec_inpbuf {
    bool m_event_port_settings_sent;
    // is USE Buffer in use
    bool m_is_use_buffer;
+   bool m_is_input_use_buffer;
    //bool                  m_is_use_pmem_buffer;
    // EOS notify pending to the IL client
    bool m_bEoSNotifyPending;
