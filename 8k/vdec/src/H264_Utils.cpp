@@ -1447,7 +1447,11 @@ OMX_U32 H264_Utils::check_header(OMX_IN OMX_BUFFERHEADERTYPE * buffer,
                      "check_header: start code two nals in one buffer SPS+PPS %d",
                      pos);
             eRet = 0;
+         } else if (((nal1_ptr[0] & 0x1f) == NALU_TYPE_SPS) && (buffer->nFilledLen < 512)) {
+             eRet = 0;
          }
+
+
       } else {
          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
                   "check_header: start code partial nal in one buffer %d",
