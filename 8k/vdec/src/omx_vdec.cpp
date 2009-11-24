@@ -49,7 +49,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "MP4_Utils.h"
 
 #define H264_START_CODE             0x00000001
-#define H264_START_CODE_MASK        0xFFFFFFFF
+#define H264_START_CODE_MASK        0x00FFFFFF
 #define VC1_SP_MP_START_CODE        0xC5000000
 #define VC1_SP_MP_START_CODE_RCV_V1 0x85000000
 
@@ -7389,7 +7389,7 @@ void omx_vdec::initialize_arbitrary_bytes_environment() {
    QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
            "initialize_arbitrary_bytes_environment \n");
    if (m_bStartCode) {
-      m_arbitrary_bytes_info.start_code.m_last_4byte = 0;
+      m_arbitrary_bytes_info.start_code.m_last_4byte = 0xFFFFFFFF;
       m_arbitrary_bytes_info.start_code.m_last_start_code = 0;
    } else {
       m_arbitrary_bytes_info.frame_size.m_size_byte_left = 0;
@@ -7602,6 +7602,14 @@ OMX_ERRORTYPE omx_vdec::
    OMX_U32 pos = 0;
    OMX_U32 in_len = source->nFilledLen;
    OMX_U8 *inputBitStream = source->pBuffer + source->nOffset;
+   OMX_U8 scl = 4; // by default start code length is 4
+   bool bH264 = false;
+
+   if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.avc", 26) == 0)
+   {
+     scl = 3; // h264 uses 3 bytes start code
+     bH264 = true;
+   }
 
    // To concatenate with previous frame if there is
    if (*isPartialFrame == false) {
@@ -7614,14 +7622,24 @@ OMX_ERRORTYPE omx_vdec::
       if ((code & m_arbitrary_bytes_info.start_code.
            m_start_code_mask) ==
           m_arbitrary_bytes_info.start_code.m_start_code) {
-         if (readSize > 3) {
-            readSize = readSize - 3;
+         scl = 4;
+         if (bH264 && (code>>24))
+            scl = 3;
+         if (readSize > scl -1 ) {
+             // in this case, this start code is the beyond
+             // the buffer boundary, fully inside inputBitStream buffer
+            readSize = readSize - scl + 1;
             copy_size = readSize;
             if ((m_arbitrary_bytes_info.start_code.
                  m_last_start_code & m_arbitrary_bytes_info.
                  start_code.m_start_code_mask)
                 == m_arbitrary_bytes_info.start_code.
                 m_start_code) {
+                 // we have a start code left over from the previous frame
+                 scl = 4;
+                 if (bH264 &&
+                     (m_arbitrary_bytes_info.start_code.m_last_start_code >> 24))
+                       scl = 3; // only 2 zeros are in the start code
                QTV_MSG_PRIO3(QTVDIAG_GENERAL,
                         QTVDIAG_PRIO_MED,
                         "source->nOffset = %d start_code %x %x\n",
@@ -7670,16 +7688,14 @@ OMX_ERRORTYPE omx_vdec::
                            m_arbitrary_bytes_info.
                            start_code.
                            m_last_start_code);
-                  for (OMX_S8 i = 0; i < 4; i++) {
+                  for (OMX_S8 i = 0; i < scl; i++) {
                      *(dest->pBuffer +
                        dest->nFilledLen) =
                    (OMX_U8) ((m_arbitrary_bytes_info.
                          start_code.
                          m_last_start_code & 0xFF
-                         << (8 * (3 - i))) >> (8 *
-                                (3
-                                 -
-                                 i)));
+                         << (8 * (scl - 1 - i))) >> (8 *
+                                (scl - 1 - i)));
                      dest->nFilledLen++;
                   }
                }
@@ -7734,7 +7750,7 @@ OMX_ERRORTYPE omx_vdec::
                      code, readSize);
             m_arbitrary_bytes_info.start_code.
                 m_last_start_code = code;
-            dest->nFilledLen -= (3 - readSize);
+            dest->nFilledLen -= (scl - 1 - readSize);
             dest->nFlags = source->nFlags;
             dest->nTimeStamp = source->nTimeStamp;
             *isPartialFrame = false;
@@ -7797,14 +7813,17 @@ OMX_ERRORTYPE omx_vdec::
            m_last_start_code & m_arbitrary_bytes_info.start_code.
            m_start_code_mask)
           == m_arbitrary_bytes_info.start_code.m_start_code) {
-         for (OMX_S8 i = 0; i < 4; i++) {
+          scl = 4;
+          if (bH264 &&
+              (m_arbitrary_bytes_info.start_code.m_last_start_code>>24))
+             scl = 3;
+         for (OMX_S8 i = 0; i < scl; i++) {
             *(dest->pBuffer + dest->nFilledLen) =
                 (OMX_U8) ((m_arbitrary_bytes_info.
                       start_code.
                       m_last_start_code & 0xFF << (8 *
-                               (3 -
-                                i)))
-                     >> (8 * (3 - i)));
+                               (scl - 1 - i)))
+                     >> (8 * (scl - 1 - i)));
             dest->nFilledLen++;
          }
          m_arbitrary_bytes_info.start_code.m_last_start_code =
