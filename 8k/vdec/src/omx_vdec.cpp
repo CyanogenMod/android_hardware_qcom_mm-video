@@ -249,7 +249,6 @@ m_eos_timestamp(0), m_out_buf_count(OMX_CORE_NUM_OUTPUT_BUFFERS),
     //m_out_bm_count(0),
     m_inp_buf_count(0),
 m_inp_buf_size(OMX_CORE_INPUT_BUFFER_SIZE),
-m_inp_bm_count(0),
 m_inp_bPopulated(OMX_FALSE),
 m_out_bPopulated(OMX_FALSE),
 m_height(0),
@@ -301,6 +300,7 @@ flush_before_vdec_op_q(NULL)
    memset(&m_frame_info, 0, sizeof(m_frame_info));
    memset(m_out_bm_count, 0x0, (OMX_CORE_NUM_OUTPUT_BUFFERS + 7) / 8);
 
+   memset(m_inp_bm_count, 0x0, (MAX_NUM_INPUT_BUFFERS + 7) / 8);
    memset(&m_arbitrary_bytes_info, 0,
           sizeof(union omx_arbitrary_bytes_info));
    for (int i = 0; i < OMX_CORE_NUM_INPUT_BUFFERS; i++) {
@@ -3164,15 +3164,15 @@ OMX_ERRORTYPE omx_vdec::use_input_buffer(OMX_IN OMX_HANDLETYPE hComp,
 {
    OMX_ERRORTYPE eRet = OMX_ErrorNone;
    OMX_BUFFERHEADERTYPE *bufHdr;   // buffer header
-   unsigned i;      // Temporary counter
-   m_inp_buf_count = OMX_CORE_NUM_INPUT_BUFFERS;
+   unsigned i,temp;      // Temporary counter
+   temp = OMX_CORE_NUM_INPUT_BUFFERS;
    if (bytes <= OMX_CORE_INPUT_BUFFER_SIZE) {
       if (!m_inp_mem_ptr) {
          int nBufHdrSize =
              m_inp_buf_count * sizeof(OMX_BUFFERHEADERTYPE);
-         m_inp_bm_count = BITMASK_SIZE(m_inp_buf_count);
+         temp = BITMASK_SIZE(m_inp_buf_count);
          m_inp_mem_ptr =
-             (char *)calloc((nBufHdrSize + m_inp_bm_count), 1);
+             (char *)calloc((nBufHdrSize + temp), 1);
          m_use_pmem = 0;
 
          if (m_inp_mem_ptr) {
@@ -3207,7 +3207,7 @@ OMX_ERRORTYPE omx_vdec::use_input_buffer(OMX_IN OMX_HANDLETYPE hComp,
                //m_inp_bm_ptr  = ((char*)bufHdr) + nBufHdrSize ;
                input[0] = *bufferHdr;
             }
-            BITMASK_SET(&m_inp_bm_count, 0);
+            BITMASK_SET(m_inp_bm_count, 0);
             // Settting the entire storage nicely
             for (i = 0; i < m_inp_buf_count; i++, bufHdr++) {
                memset(bufHdr, 0,
@@ -3289,7 +3289,7 @@ OMX_ERRORTYPE omx_vdec::use_input_buffer(OMX_IN OMX_HANDLETYPE hComp,
          }
       } else {
          for (i = 0; i < m_inp_buf_count; i++) {
-            if (BITMASK_ABSENT(&m_inp_bm_count, i)) {
+            if (BITMASK_ABSENT(m_inp_bm_count, i)) {
                // bit space available
                break;
             }
@@ -3311,7 +3311,7 @@ OMX_ERRORTYPE omx_vdec::use_input_buffer(OMX_IN OMX_HANDLETYPE hComp,
                input[i] = *bufferHdr;
             }
             (*bufferHdr)->pAppPrivate = appData;
-            BITMASK_SET(&m_inp_bm_count, i);
+            BITMASK_SET(m_inp_bm_count, i);
          } else {
             eRet = OMX_ErrorInsufficientResources;
          }
@@ -3634,7 +3634,7 @@ OMX_ERRORTYPE omx_vdec::allocate_input_buffer(OMX_IN OMX_HANDLETYPE hComp,
 //        m_inp_bm_ptr  = ((char *)buf)    + nBufSize;
             }
 
-            BITMASK_SET(&m_inp_bm_count, 0);
+            BITMASK_SET(m_inp_bm_count, 0);
 
             // Settting the entire storage nicely
             for (i = 0; i < m_inp_buf_count; i++, bufHdr++) {
@@ -3954,7 +3954,7 @@ OMX_ERRORTYPE omx_vdec::allocate_input_buffer(OMX_IN OMX_HANDLETYPE hComp,
          }
       } else {
          for (i = 0; i < m_inp_buf_count; i++) {
-            if (BITMASK_ABSENT(&m_inp_bm_count, i)) {
+            if (BITMASK_ABSENT(m_inp_bm_count, i)) {
                // bit space available
                break;
             }
@@ -3976,7 +3976,7 @@ OMX_ERRORTYPE omx_vdec::allocate_input_buffer(OMX_IN OMX_HANDLETYPE hComp,
                 ((OMX_BUFFERHEADERTYPE *) m_inp_mem_ptr) +
                 i;
             (*bufferHdr)->pAppPrivate = appData;
-            BITMASK_SET(&m_inp_bm_count, i);
+            BITMASK_SET(m_inp_bm_count, i);
          } else {
             eRet = OMX_ErrorInsufficientResources;
          }
@@ -4436,7 +4436,7 @@ OMX_ERRORTYPE omx_vdec::free_buffer(OMX_IN OMX_HANDLETYPE hComp,
                   "free_buffer on i/p port - before Clear bitmask %x \n",
                   m_inp_bm_count);
          // Clear the bit associated with it.
-         BITMASK_CLEAR(&m_inp_bm_count, nPortIndex);
+         BITMASK_CLEAR(m_inp_bm_count, nPortIndex);
          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                   "free_buffer on i/p port - after Clear bitmask %x \n",
                   m_inp_bm_count);
@@ -6255,7 +6255,7 @@ bool omx_vdec::allocate_input_done(void) {
    }
    if (m_inp_mem_ptr) {
       for (; i < m_inp_buf_count; i++) {
-         if (BITMASK_ABSENT(&m_inp_bm_count, i)) {
+         if (BITMASK_ABSENT(m_inp_bm_count, i)) {
             break;
          }
       }
@@ -6384,7 +6384,7 @@ bool omx_vdec::release_input_done(void) {
 
    if (m_inp_mem_ptr) {
       for (; j < m_inp_buf_count; j++) {
-         if (BITMASK_PRESENT(&m_inp_bm_count, j)) {
+         if (BITMASK_PRESENT(m_inp_bm_count, j)) {
             break;
          }
       }
