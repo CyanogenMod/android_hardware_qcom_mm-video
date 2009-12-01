@@ -43,6 +43,8 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define DEBUG_ON 0
 #include "qtv_msg.h"
 #include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "cutils/properties.h"
 #include "adsp.h"
 #include "omx_vdec.h"
@@ -988,24 +990,17 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
 
    char property_value[PROPERTY_VALUE_MAX] = {0};
    OMX_ERRORTYPE eRet = OMX_ErrorNone;
-   int r;
+   int r, fd;
 
-#if 0
-   // Check if multiple instances of the decoder is running
-   struct adsp_module *mod;
-#ifdef _ANDROID_
-   mod = adsp_open("/dev/adsp/VIDEOTASK", this, NULL);
-#else
-   mod = adsp_open("/dev/VIDEOTASK", this, NULL);
-#endif
-   if (mod == NULL) {
-      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
-              "Omx_vdec::Comp Init Returning failure\n");
+   fd = open("/dev/vdec", O_RDWR);
+
+   if(fd < 0)
+   {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,"Omx_vdec::Comp Init Returning failure\n");
       // Another decoder instance is running. return from here.
       return OMX_ErrorInsufficientResources;
    }
-   adsp_close(mod);
-#endif
+   close(fd);
 
    if(0 != property_get("persist.omxvideo.arb-bytes", property_value, NULL))
    {
