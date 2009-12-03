@@ -182,7 +182,8 @@ class H264_Utils {
    bool isNewFrame(OMX_IN OMX_U8 * bitstream,
          OMX_IN OMX_U32 bitstream_length,
          OMX_IN OMX_U32 size_of_nal_length_field,
-         OMX_OUT OMX_BOOL & isNewFrame);
+         OMX_OUT OMX_BOOL & isNewFrame,
+         bool & isforceToStichNextNAL);
    bool parseHeader(uint8 * encodedBytes,
           uint32 totalBytes,
           uint32 nal_len,

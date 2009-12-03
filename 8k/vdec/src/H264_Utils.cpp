@@ -391,7 +391,8 @@ SIDE EFFECTS:
 bool H264_Utils::isNewFrame(OMX_IN OMX_U8 * buffer,
              OMX_IN OMX_U32 buffer_length,
              OMX_IN OMX_U32 size_of_nal_length_field,
-             OMX_OUT OMX_BOOL & isNewFrame)
+             OMX_OUT OMX_BOOL & isNewFrame,
+             bool & isforceToStichNextNAL)
 {
    NALU nal_unit;
    uint16 first_mb_in_slice = 0;
@@ -467,6 +468,7 @@ bool H264_Utils::isNewFrame(OMX_IN OMX_U8 * buffer,
       }      // end of switch
    }         // end of if
    m_prv_nalu = nal_unit;
+   isforceToStichNextNAL = m_forceToStichNextNAL;
    QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
             "get_h264_nal_type - newFrame value %d\n", isNewFrame);
    return eRet;
