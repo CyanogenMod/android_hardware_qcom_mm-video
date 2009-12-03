@@ -5619,6 +5619,7 @@ OMX_ERRORTYPE omx_vdec::
                 buffer->pBuffer + buffer->nOffset,
                 buffer->nFilledLen);
          m_pcurrent_frame->nFilledLen += buffer->nFilledLen;
+         m_pcurrent_frame->nTimeStamp = buffer->nTimeStamp;
       } else if (find_extra_buffer_index(buffer->pBuffer) != -1) {
          QTV_MSG_PRIO4(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
                   "Buffer %p must be an extra buffer size of current len %d extra len %d extra offset %d\n",
