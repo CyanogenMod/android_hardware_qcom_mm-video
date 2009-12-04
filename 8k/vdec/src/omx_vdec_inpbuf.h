@@ -43,7 +43,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //////////////////////////////////////////////////////////////////////////////
 
 // Number of input buffers defined at one place
-#define MAX_NUM_INPUT_BUFFERS                                        4
+#define MAX_NUM_INPUT_BUFFERS                                        8
 #define MAX_INPUT_BUFFERS_BITMASK_SIZE ((MAX_NUM_INPUT_BUFFERS/8) + 1)
 
 // OMX video decoder input buffer class

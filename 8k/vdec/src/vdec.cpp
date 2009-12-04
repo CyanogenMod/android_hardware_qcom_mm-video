@@ -60,7 +60,7 @@ static void vdec_frame_cb_handler(void *vdec_context,
 static void vdec_reuse_input_cb_handler(void *vdec_context, void *buffer_id);
 
 #define VDEC_INPUT_BUFFER_SIZE  450 * 1024
-#define VDEC_NUM_INPUT_BUFFERS  4
+#define VDEC_NUM_INPUT_BUFFERS  8
 
 struct Vdec_pthread_info {
    pthread_mutex_t in_buf_lock;

@@ -590,7 +590,7 @@ class omx_vdec:public qc_omx_component, public omx_vdec_inpbuf {
    // Size of Input Buffers
    unsigned int m_inp_buf_size;
    // bitmask array size for input side
-   OMX_U32 m_inp_bm_count;
+   unsigned char m_inp_bm_count[(MAX_NUM_INPUT_BUFFERS + 7) / 8];
    //Input port Populated
    OMX_BOOL m_inp_bPopulated;
    //Output port Populated
