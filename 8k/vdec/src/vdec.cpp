@@ -773,7 +773,7 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
               "vdec: Opening MPEG4 Decoder \n");
       init.fourcc = MAKEFOURCC('m', 'p', '4', 'v');
-      init.order = 0;
+      init.order = 1;
    } else if (!strcmp(dec->ctxt->kind, "OMX.qcom.video.decoder.h263")) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
               "vdec: Opening H263 Decoder \n");

@@ -672,6 +672,7 @@ bool MP4_Utils::validate_profile_and_level(uint32 profile_and_level_indication)
             "MP4 profile and level %d\n",
             profile_and_level_indication);
    if ((m_default_profile_chk && m_default_level_chk)
+       && (profile_and_level_indication != RESERVED_OBJECT_TYPE)
        && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL0)
        && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL1)
        && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL2)
@@ -679,10 +680,110 @@ bool MP4_Utils::validate_profile_and_level(uint32 profile_and_level_indication)
        && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL4A)
        && (profile_and_level_indication != SIMPLE_SCALABLE_PROFILE_LEVEL0)
        && (profile_and_level_indication != SIMPLE_SCALABLE_PROFILE_LEVEL1)
-       && (profile_and_level_indication != SIMPLE_SCALABLE_PROFILE_LEVEL2)) {
-      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_FATAL,
-              "Caution: INVALID_PROFILE_AND_LEVEL \n");
+       && (profile_and_level_indication != SIMPLE_SCALABLE_PROFILE_LEVEL2)
+       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL0)
+       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL1)
+       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL2)
+       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL3)
+       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL4)
+       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL5)) {
+      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_FATAL,
+              "Caution: INVALID_PROFILE_AND_LEVEL 0x%x \n", profile_and_level_indication);
       return false;
    }
    return true;
+}
+
+/*===========================================================================
+FUNCTION:
+  MP4_Utils::parse_frames_in_chunk
+
+DESCRIPTION:
+  Calculates number of valid frames present in the chunk based on frame header
+  and set the timestamp interval based on the previous timestamp interval
+
+INPUT/OUTPUT PARAMETERS:
+  IN const uint8* pBitstream
+  IN uint32 size
+  IN int64 timestamp_interval
+  OUT mp4_frame_info_type *frame_info
+
+RETURN VALUE:
+  number of VOPs in chunk
+
+SIDE EFFECTS:
+  noOfVopsInSameChunk is modified with number of frames in the chunk.
+===========================================================================*/
+uint32 MP4_Utils::parse_frames_in_chunk(const uint8* pBitstream,
+                                        uint32 size,
+                                        int64 timestamp_interval,
+                                        mp4_frame_info_type *frame_info)
+{
+  int i = 0;
+  uint32 code = 0;
+  uint32 noOfVopsInSameChunk = 0;
+  uint32 vopType = -1;
+
+  if (timestamp_interval == 0)
+  {
+    QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,"Timestamp interval = 0. Setting the timestamp interval into 33");
+    timestamp_interval = 33;
+  }
+
+  if (size == 0)
+  {
+    code = (pBitstream[i]<<24) | (pBitstream[i+1]<<16) | (pBitstream[i+2]<<8) | pBitstream[i+3];
+    i += 4;
+  }
+
+  for (; (i<size) && (noOfVopsInSameChunk < MAX_FRAMES_IN_CHUNK); ++i)
+  {
+    if (code == VOP_START_CODE)
+    {
+       frame_info[noOfVopsInSameChunk].offset = i-4;
+       if(noOfVopsInSameChunk > 0)
+       {
+        frame_info[noOfVopsInSameChunk-1].size = (i-4)-(frame_info[noOfVopsInSameChunk-1].offset);
+        frame_info[noOfVopsInSameChunk].timestamp_increment = timestamp_interval * (noOfVopsInSameChunk-1);
+      }
+      vopType = 0x000000c0 & (pBitstream[i]);
+      if(0x00000000 == vopType) frame_info[noOfVopsInSameChunk].vopType = MPEG4_I_VOP;
+      else if(0x00000040 == vopType)  frame_info[noOfVopsInSameChunk].vopType = MPEG4_P_VOP;
+      else if(0x00000080 == vopType)  frame_info[noOfVopsInSameChunk].vopType = MPEG4_B_VOP;
+      else if(0x000000c0 == vopType)  frame_info[noOfVopsInSameChunk].vopType = MPEG4_S_VOP;
+      noOfVopsInSameChunk++;
+      code = 0;
+    }
+    else if (code == VOL_START_CODE)
+    {
+      frame_info[noOfVopsInSameChunk].offset = i-4;
+      frame_info[noOfVopsInSameChunk].vopType = NO_VOP;
+
+      noOfVopsInSameChunk++;
+      break;
+    }
+    code <<= 8;
+    code |= (0x000000FF & (pBitstream[i]));
+  }
+
+  if(noOfVopsInSameChunk > 0 && noOfVopsInSameChunk <= MAX_FRAMES_IN_CHUNK)
+  {
+     frame_info[noOfVopsInSameChunk-1].size = size-(frame_info[noOfVopsInSameChunk-1].offset);
+  }
+
+  if(noOfVopsInSameChunk > 1)
+  {
+    frame_info[0].timestamp_increment = timestamp_interval * (noOfVopsInSameChunk-1);
+  }
+  else if (noOfVopsInSameChunk == 1)
+  {
+    frame_info[0].timestamp_increment = 0;
+  }
+
+  if(noOfVopsInSameChunk == MAX_FRAMES_IN_CHUNK)
+  {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,"NumFramesinChunk reached Max Value, So possible multiple VOPs in the last frame");
+  }
+   QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,"FramesinChunk %d", noOfVopsInSameChunk);
+  return noOfVopsInSameChunk;
 }

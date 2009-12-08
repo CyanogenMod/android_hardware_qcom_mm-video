@@ -64,6 +64,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "qtv_msg.h"
 #include "OMX_QCOMExtns.h"
 #include "H264_Utils.h"
+#include "MP4_Utils.h"
 
 extern "C" {
    void *get_omx_component_factory_fn(void);
@@ -259,6 +260,8 @@ class omx_vdec:public qc_omx_component, public omx_vdec_inpbuf {
 
    static void frame_done_cb(struct vdec_context *ctxt,
               struct vdec_frame *frame);
+   static void   frame_done_display_order_cb(struct vdec_context *ctxt,
+                                              struct vdec_frame *frame);
 
    static void process_event_cb(struct vdec_context *ctxt,
                  unsigned char id);
@@ -677,6 +680,22 @@ class omx_vdec:public qc_omx_component, public omx_vdec_inpbuf {
    // SPS+PPS sent as part of set_config
    OMX_VENDOR_EXTRADATATYPE m_vendor_config;
    header_state m_header_state;
+    bool                                m_b_divX_parser;
+    MP4_Utils                           *m_mp4_utils;
+    uint64                              m_timestamp_interval;
+    uint64                              m_prev_timestamp;
+    bool                                m_b_display_order;
+    struct vdec_frame                   *m_pPrevFrame;
+
+    typedef struct
+    {
+      mp4_frame_info_type frame_info[MAX_FRAMES_IN_CHUNK];
+      uint32              nFrames;
+      uint32              last_decoded_index;
+      bool                parsing_required;
+    } omx_mp4_divX_buffer_info;
+
+    omx_mp4_divX_buffer_info            m_divX_buffer_info;
 };
 
 #endif // __OMX_VDEC_H__

@@ -76,6 +76,7 @@ INITIALIZATION AND SEQUENCING REQUIREMENTS
 ========================================================================== */
 #include "qtv_msg.h"
 #include "OMX_Core.h"
+#include "qtypes.h"
 
 /* ==========================================================================
 
@@ -103,7 +104,7 @@ typedef signed char int8;   /* Signed 8  bit value */
 
 typedef unsigned char byte;   /* Unsigned 8  bit value type. */
 //#endif
-
+#define RESERVED_OBJECT_TYPE             0x00
 #define SIMPLE_PROFILE_LEVEL0            0x08
 #define SIMPLE_PROFILE_LEVEL1            0x01
 #define SIMPLE_PROFILE_LEVEL2            0x02
@@ -114,7 +115,17 @@ typedef unsigned char byte;   /* Unsigned 8  bit value type. */
 #define SIMPLE_SCALABLE_PROFILE_LEVEL1                  0x11
 #define SIMPLE_SCALABLE_PROFILE_LEVEL2                  0x12
 
+#define SIMPLE_SCALABLE_PROFILE_LEVEL0  0x10
+#define SIMPLE_SCALABLE_PROFILE_LEVEL1  0x11
+#define SIMPLE_SCALABLE_PROFILE_LEVEL2  0x12
+#define ADVANCED_SIMPLE_PROFILE_LEVEL0  0xF0
+#define ADVANCED_SIMPLE_PROFILE_LEVEL1  0xF1
+#define ADVANCED_SIMPLE_PROFILE_LEVEL2  0xF2
+#define ADVANCED_SIMPLE_PROFILE_LEVEL3  0xF3
+#define ADVANCED_SIMPLE_PROFILE_LEVEL4  0xF4
+#define ADVANCED_SIMPLE_PROFILE_LEVEL5  0xF5
 
+#define VISUAL_OBJECT_SEQUENCE_START_CODE   0x000001B0
 #define MP4ERROR_SUCCESS     0
 
 #define VIDEO_OBJECT_LAYER_START_CODE_MASK  0xFFFFFFF0
@@ -143,6 +154,28 @@ typedef struct {
    unsigned char *data;
    unsigned long int numBytes;
 } mp4StreamType;
+
+#define MAX_FRAMES_IN_CHUNK                 10
+#define VOP_START_CODE                      0x000001B6
+#define VOL_START_CODE                      0x000001B0
+
+typedef enum VOPTYPE
+{
+  NO_VOP = -1, // bitstream contains no VOP.
+  MPEG4_I_VOP = 0,   // bitstream contains an MPEG4 I-VOP
+  MPEG4_P_VOP = 1,   // bitstream contains an MPEG4 P-VOP
+  MPEG4_B_VOP = 2,   // bitstream contains an MPEG4 B-VOP
+  MPEG4_S_VOP = 3,   // bitstream contains an MPEG4 S-VOP
+} VOP_TYPE;
+
+typedef struct
+{
+  uint32    timestamp_increment;
+  uint32    offset;
+  uint32    size;
+  VOP_TYPE  vopType;
+} mp4_frame_info_type;
+
 
 class MP4_Utils {
       private:
@@ -251,6 +284,30 @@ SIDE EFFECTS:
   None.
 ---------------------------------------------------------------------------*/
    static uint32 read_bit_field(posInfoType * posPtr, uint32 size);
+/*===========================================================================
+FUNCTION:
+  MP4_Utils::parse_frames_in_chunk
+
+DESCRIPTION:
+  Calculates number of valid frames present in the chunk based on frame header
+  and set the timestamp interval based on the previous timestamp interval
+
+INPUT/OUTPUT PARAMETERS:
+  const uint8* pBitstream [IN]
+  uint32 size [IN]
+  int64 timestamp_interval [IN]
+  mp4_frame_info_type *frame_info [OUT]
+
+RETURN VALUE:
+  number of VOPs in chunk
+
+SIDE EFFECTS:
+  noOfVopsInSameChunk is modified with number of frames in the chunk.
+===========================================================================*/
+uint32 parse_frames_in_chunk(const uint8* pBitstream,
+                             uint32 size,
+                             int64 timestamp_interval,
+                             mp4_frame_info_type *frame_info);
 
 };
 #endif /*  MP4_UTILS_H */

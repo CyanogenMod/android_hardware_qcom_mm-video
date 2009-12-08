@@ -289,7 +289,13 @@ m_arbitrary_bytes_input_mem_ptr(NULL),
 m_current_arbitrary_bytes_input(NULL),
 m_bPartialFrame(false),
 m_bStartCode(false), m_header_state(HEADER_STATE_RECEIVED_NONE), m_use_pmem(0),
-flush_before_vdec_op_q(NULL)
+flush_before_vdec_op_q(NULL),
+m_b_divX_parser(false),
+m_mp4_utils(NULL),
+m_timestamp_interval(0),
+m_prev_timestamp(0),
+m_b_display_order(false),
+m_pPrevFrame(NULL)
 {
    /* Assumption is that , to begin with , we have all the frames with client */
    memset(m_out_flags, 0x00, (OMX_CORE_NUM_OUTPUT_BUFFERS + 7) / 8);
@@ -372,6 +378,74 @@ void omx_vdec::frame_done_cb_stub(struct vdec_context *ctxt,
    pThis->post_event((unsigned)ctxt, (unsigned)frame,
            OMX_COMPONENT_GENERATE_FRAME_DONE);
    return;
+}
+
+/* ======================================================================
+FUNCTION
+  omx_vdec::frame_done_display_order_cb
+
+DESCRIPTION
+  Frame done callback from the video decoder with a display order
+
+PARAMETERS
+  1. ctxt(I)  -- Context information to the self.
+  2. frame(I) -- video frame decoded
+
+RETURN VALUE
+  None.
+
+========================================================================== */
+void omx_vdec::frame_done_display_order_cb(struct vdec_context *ctxt, struct vdec_frame *frame)
+{
+  bool bCurrentBFrame = false;
+
+  omx_vdec *pThis = (omx_vdec *) ctxt->extra;
+  if (pThis->m_pPrevFrame)
+  {
+    if (frame->frameDetails.ePicType[0] == VDEC_PICTURE_TYPE_B)
+    {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,"frame_done_display_order_cb - b frame");
+      bCurrentBFrame = true;
+    }
+
+    if (bCurrentBFrame)
+    {
+      if (pThis->m_pPrevFrame->timestamp < frame->timestamp)
+      {
+        /* Swap timestamp */
+        pThis->m_pPrevFrame->timestamp ^= frame->timestamp;
+        frame->timestamp ^= pThis->m_pPrevFrame->timestamp;
+        pThis->m_pPrevFrame->timestamp ^= frame->timestamp;
+      }
+      pThis->frame_done_cb(ctxt, frame);
+    }
+    else if (frame->flags & FRAME_FLAG_EOS)
+    {
+      pThis->frame_done_cb(ctxt, pThis->m_pPrevFrame);
+      pThis->frame_done_cb(ctxt, frame);
+      pThis->m_pPrevFrame = NULL;
+    }
+    else
+    {
+      if (pThis->m_pPrevFrame->timestamp > frame->timestamp)
+      {
+        QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,"Warning - previous ts > current ts. And both are non B-frames");
+      }
+      pThis->frame_done_cb(ctxt, pThis->m_pPrevFrame);
+      pThis->m_pPrevFrame = frame;
+    }
+  }
+  else
+  {
+    if (frame->flags & FRAME_FLAG_EOS)
+    {
+      pThis->frame_done_cb(ctxt, frame);
+    }
+    else
+    {
+      pThis->m_pPrevFrame = frame;
+    }
+  }
 }
 
 /* ======================================================================
@@ -901,8 +975,15 @@ void omx_vdec::process_event_cb(struct vdec_context *ctxt, unsigned char id)
             buffer_done_cb((struct vdec_context *)p1,
                       (void *)p2);
          } else if (id == OMX_COMPONENT_GENERATE_FRAME_DONE) {
+            if (pThis->m_b_display_order)
+            {
+               frame_done_display_order_cb((struct vdec_context *)p1,(struct vdec_frame *)p2);
+            }
+            else
+            {
             frame_done_cb((struct vdec_context *)p1,
                      (struct vdec_frame *)p2);
+            }
          } else if (id == OMX_COMPONENT_GENERATE_ETB) {
             pThis->
                 empty_this_buffer_proxy_frame_based((OMX_HANDLETYPE) p1, (OMX_BUFFERHEADERTYPE *) p2);
@@ -1086,6 +1167,12 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
               "Mp4 output buffer Count updated\n");
       m_out_buf_count = OMX_CORE_NUM_OUTPUT_BUFFERS_MP4;
       m_outstanding_frames = -OMX_CORE_NUM_OUTPUT_BUFFERS_MP4;
+      m_bArbitraryBytes = false;
+      m_b_divX_parser = true;
+      memset(&m_divX_buffer_info, 0, sizeof(m_divX_buffer_info));
+      m_divX_buffer_info.parsing_required = true;
+      m_mp4_utils = new MP4_Utils();
+      m_b_display_order = true;
    } else if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.avc", 26) ==
          0) {
       m_h264_utils = new H264_Utils();
@@ -1838,6 +1925,14 @@ bool omx_vdec::execute_output_flush(void)
       if (!canceled)
          m_cb.FillBufferDone(&m_cmp, m_app_data,
                    (OMX_BUFFERHEADERTYPE *) p2);
+   }
+   if (m_b_display_order)
+   {
+      if(m_pPrevFrame) {
+       frame_done_cb((struct vdec_context *)&m_vdec_cfg, m_pPrevFrame);
+       m_pPrevFrame = NULL;
+      }
+      m_divX_buffer_info.parsing_required = true;
    }
    return bRet;
 }
@@ -5784,6 +5879,82 @@ unsigned omx_vdec::push_one_input_buffer(OMX_IN OMX_BUFFERHEADERTYPE * buffer) {
 
    unsigned nPortIndex = buffer - ((OMX_BUFFERHEADERTYPE *) m_inp_mem_ptr);
    if (nPortIndex < m_inp_buf_count) {
+    if (m_b_divX_parser)
+    {
+      if (m_prev_timestamp < buffer->nTimeStamp)
+      {
+        if ((m_timestamp_interval > (buffer->nTimeStamp - m_prev_timestamp)) ||
+            (m_timestamp_interval == 0))
+        {
+          m_timestamp_interval = buffer->nTimeStamp - m_prev_timestamp;
+        }
+        m_prev_timestamp = buffer->nTimeStamp;
+      }
+
+      if (m_divX_buffer_info.parsing_required)
+      {
+        m_divX_buffer_info.nFrames = m_mp4_utils->parse_frames_in_chunk(
+                                                          buffer->pBuffer + buffer->nOffset,
+                                                          buffer->nFilledLen,
+                                                          m_timestamp_interval,
+                                                          m_divX_buffer_info.frame_info);
+        m_divX_buffer_info.parsing_required = false;
+      }
+
+      if ((buffer->nFlags & OMX_BUFFERFLAG_EOS) &&  (m_divX_buffer_info.nFrames == 0))
+      {
+        // Zero length EOS
+        m_divX_buffer_info.nFrames = 1 ;
+      }
+
+      while (m_divX_buffer_info.last_decoded_index < m_divX_buffer_info.nFrames)
+      {
+        memset(&m_frame_info,0,sizeof(m_frame_info));
+        m_frame_info.data      = buffer->pBuffer + buffer->nOffset +
+                                 m_divX_buffer_info.frame_info[m_divX_buffer_info.last_decoded_index].offset;
+        m_frame_info.len       = m_divX_buffer_info.frame_info[m_divX_buffer_info.last_decoded_index].size;
+        m_frame_info.timestamp = buffer->nTimeStamp +
+                                 m_divX_buffer_info.frame_info[m_divX_buffer_info.last_decoded_index].timestamp_increment;
+
+        bool all_done = (m_divX_buffer_info.last_decoded_index == m_divX_buffer_info.nFrames - 1)?true:false;
+        remove_top_entry();
+        if ((buffer->nFlags & OMX_BUFFERFLAG_EOS) && all_done)
+        {
+          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,"empty_this_buffer: EOS received with TS %d\n",(int)buffer->nTimeStamp);
+          m_eos_timestamp = buffer->nTimeStamp;
+          m_frame_info.flags = FRAME_FLAG_EOS;
+        }
+        void *cookie = ((all_done)?buffer:NULL);
+
+         QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,"Post input buffer %d ts %d", m_ebd_cnt, m_frame_info.timestamp);
+        int nRet = vdec_post_input_buffer(m_vdec, &(m_frame_info), cookie, m_use_pmem);
+       QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,"vdec_post_input_buffer returned %d\n",nRet);
+        if(VDEC_EOUTOFBUFFERS == nRet)
+        {
+          push_back_entry(nPortIndex);
+          break;
+        }
+        else if (all_done)
+        {
+           ++m_ebd_cnt;
+            QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                     "\n ETB Count %u \n", m_ebd_cnt);
+            QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                     "\n First pending buffer index is set to %d (%x)\n",
+                     m_first_pending_buf_idx, m_flags[0] );
+            push_cnt++;
+
+          memset(&m_divX_buffer_info, 0, sizeof(m_divX_buffer_info));
+          m_divX_buffer_info.parsing_required = true;
+          break;
+        }
+        else
+        {
+          m_divX_buffer_info.last_decoded_index++;
+        }
+      }
+    }
+      else {
       memset(&m_frame_info, 0, sizeof(m_frame_info));
       if (buffer->nFlags & OMX_BUFFERFLAG_EOS) {
          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
@@ -5814,6 +5985,7 @@ unsigned omx_vdec::push_one_input_buffer(OMX_IN OMX_BUFFERHEADERTYPE * buffer) {
          push_cnt++;
 
       }
+   }
    }
    return push_cnt;
 }
@@ -6113,6 +6285,11 @@ OMX_ERRORTYPE omx_vdec::component_deinit(OMX_IN OMX_HANDLETYPE hComp) {
    if (m_h264_utils) {
       delete m_h264_utils;
       m_h264_utils = NULL;
+   }
+   if(m_mp4_utils)
+   {
+     delete m_mp4_utils;
+     m_mp4_utils = NULL;
    }
 
    QTV_MSG_PRIO3(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
@@ -6577,18 +6754,17 @@ OMX_ERRORTYPE omx_vdec::omx_vdec_check_port_settings(OMX_BUFFERHEADERTYPE *
                width);
    } else if ((!strcmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.mpeg4"))
          || (!strcmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.h263"))) {
-      MP4_Utils mp4_parser;
       mp4StreamType dataStream;
       dataStream.data = (unsigned char *)buf;
       dataStream.numBytes = (unsigned long int)buf_len;
-      if (false == mp4_parser.parseHeader(&dataStream)) {
+      if (false == m_mp4_utils->parseHeader(&dataStream)) {
          QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
                  "Parsing Error unsupported profile or level\n");
          return OMX_ErrorStreamCorrupt;
       }
       cropx = cropy = 0;
-      cropdy = height = mp4_parser.SrcHeight();
-      cropdx = width = mp4_parser.SrcWidth();
+      cropdy = height = m_mp4_utils->SrcHeight();
+      cropdx = width = m_mp4_utils->SrcWidth();
       if ((height % 16) != 0) {
          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                   "\n Height %d is not a multiple of 16",
@@ -6672,6 +6848,7 @@ OMX_ERRORTYPE omx_vdec::omx_vdec_check_port_settings(OMX_BUFFERHEADERTYPE *
       else {
          QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
                  "omx_vdec_check_port_settings - ERROR: Unknown VC1 profile. Couldn't find height and width\n");
+         return OMX_ErrorStreamCorrupt;
       }
       cropdy = height;
       cropdx = width;
