@@ -2033,52 +2033,82 @@ void render_fb(struct OMX_BUFFERHEADERTYPE *pBufHdr)
     unsigned int addr = 0;
     OMX_OTHER_EXTRADATATYPE *pExtraData = 0;
     OMX_QCOM_EXTRADATA_FRAMEINFO *pExtraFrameInfo = 0;
+    OMX_QCOM_EXTRADATA_FRAMEDIMENSION *pExtraFrameDimension = 0;
+    OMX_QCOM_EXTRADATA_CODEC_DATA *pExtraCodecData = 0;
     OMX_QCOM_PLATFORM_PRIVATE_PMEM_INFO *pPMEMInfo = NULL;
     unsigned int destx, desty,destW, destH;
 #ifdef _ANDROID_
     MemoryHeapBase *vheap = NULL;
 #endif
 
-	unsigned int end = (unsigned int)(pBufHdr->pBuffer + pBufHdr->nAllocLen);
+    unsigned int end = (unsigned int)(pBufHdr->pBuffer + pBufHdr->nAllocLen);
 
-	struct mdp_blit_req *e;
-	union {
-		char dummy[sizeof(struct mdp_blit_req_list) +
+    struct mdp_blit_req *e;
+    union {
+             char dummy[sizeof(struct mdp_blit_req_list) +
 			   sizeof(struct mdp_blit_req) * 1];
-		struct mdp_blit_req_list list;
-	} img;
+             struct mdp_blit_req_list list;
+    } img;
 
-	if (fb_fd < 0)
-	{
-		QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,
-                  "Warning: /dev/fb0 is not opened!\n");
-		return;
-	}
+    if (fb_fd < 0)
+    {
+       QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,
+                 "Warning: /dev/fb0 is not opened!\n");
+       return;
+    }
 
-	img.list.count = 1;
-	e = &img.list.req[0];
+    img.list.count = 1;
+    e = &img.list.req[0];
 
     addr = (unsigned int)(pBufHdr->pBuffer + pBufHdr->nFilledLen);
-	// align to a 4 byte boundary
-	addr = (addr + 3) & (~3);
+    // align to a 4 byte boundary
+    addr = (addr + 3) & (~3);
 
-	// read to the end of existing extra data sections
-	pExtraData = (OMX_OTHER_EXTRADATATYPE*)addr;
+    // read to the end of existing extra data sections
+    pExtraData = (OMX_OTHER_EXTRADATATYPE*)addr;
 
-    while (addr < end && pExtraData->eType != OMX_ExtraDataFrameInfo)
-	{
-			addr += pExtraData->nSize;
-			pExtraData = (OMX_OTHER_EXTRADATATYPE*)addr;
-	}
+    while (addr < end && pExtraData->eType != OMX_ExtraDataNone)
+    {
+        if (pExtraData->eType == OMX_ExtraDataFrameInfo)
+        {
+           pExtraFrameInfo = (OMX_QCOM_EXTRADATA_FRAMEINFO *)pExtraData->data;
+        }
+        if (pExtraData->eType == OMX_ExtraDataFrameDimension)
+        {
+           pExtraFrameDimension = (OMX_QCOM_EXTRADATA_FRAMEDIMENSION *)pExtraData->data;
+        }
 
-    if (pExtraData->eType != OMX_ExtraDataFrameInfo)
+        if (pExtraData->eType == OMX_ExtraDataH264)
+        {
+           pExtraCodecData = (OMX_QCOM_EXTRADATA_CODEC_DATA *)pExtraData->data;
+        }
+
+        addr += pExtraData->nSize;
+        pExtraData = (OMX_OTHER_EXTRADATATYPE*)addr;
+    }
+
+    if (pExtraData->eType == OMX_ExtraDataNone)
     {
        QTV_MSG_PRIO2(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,
                   "pExtraData->eType %d pExtraData->nSize %d\n",pExtraData->eType,pExtraData->nSize);
     }
-    pExtraFrameInfo = (OMX_QCOM_EXTRADATA_FRAMEINFO *)pExtraData->data;
 
-   pPMEMInfo  = (OMX_QCOM_PLATFORM_PRIVATE_PMEM_INFO *)
+    if (pExtraCodecData)
+       QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,"Extra Data Codec Data TimeStamp %d\n",pExtraCodecData->h264ExtraData.seiTimeStamp);
+
+    if (pExtraFrameDimension)
+    {
+       QTV_MSG_PRIO2(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,
+                  "Extra Data FrameDimension DecWidth %d DecHeight %d\n",pExtraFrameDimension->nDecWidth,pExtraFrameDimension->nDecHeight);
+       QTV_MSG_PRIO2(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,
+                  "Extra Data FrameDimension CropWidth %d CropHeight %d\n",pExtraFrameDimension->nActualWidth,pExtraFrameDimension->nActualHeight);
+    }
+
+    if (pBufHdr->nOffset)
+       QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,"pBufHdr->nOffset = %d \n",pBufHdr->nOffset);
+
+
+    pPMEMInfo  = (OMX_QCOM_PLATFORM_PRIVATE_PMEM_INFO *)
                 ((OMX_QCOM_PLATFORM_PRIVATE_LIST *)
                     pBufHdr->pPlatformPrivate)->entryList->entry;
 #ifdef _ANDROID_
@@ -2092,27 +2122,33 @@ void render_fb(struct OMX_BUFFERHEADERTYPE *pBufHdr)
                   "DispWidth %d DispHeight %d\n",portFmt.format.video.nFrameWidth,portFmt.format.video.nFrameHeight);
 
 
-
+    if(pExtraFrameDimension)
+    {
+       e->src.width = pExtraFrameDimension->nDecWidth;
+       e->src.height = pExtraFrameDimension->nDecHeight;
+    }else{
 	e->src.width = portFmt.format.video.nStride;
 	e->src.height = portFmt.format.video.nSliceHeight;
-	e->src.format = MDP_Y_CBCR_H2V2;
-        e->src.offset = pPMEMInfo->offset;
+    }
+
+    e->src.format = MDP_Y_CBCR_H2V2;
+    e->src.offset = pPMEMInfo->offset;
 #ifdef _ANDROID_
-	e->src.memory_id = vheap->getHeapID();
+    e->src.memory_id = vheap->getHeapID();
 #else
-	e->src.memory_id = pPMEMInfo->pmem_fd;
+    e->src.memory_id = pPMEMInfo->pmem_fd;
 #endif
 
     QTV_MSG_PRIO2(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,
                   "pmemOffset %d pmemID %d\n",e->src.offset,e->src.memory_id);
 
-	e->dst.width = vinfo.xres;
-	e->dst.height = vinfo.yres;
-	e->dst.format = MDP_RGB_565;
-	e->dst.offset = 0;
-	e->dst.memory_id = fb_fd;
+    e->dst.width = vinfo.xres;
+    e->dst.height = vinfo.yres;
+    e->dst.format = MDP_RGB_565;
+    e->dst.offset = 0;
+    e->dst.memory_id = fb_fd;
 
-	e->transp_mask = 0xffffffff;
+    e->transp_mask = 0xffffffff;
     QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_HIGH,
                   "Frame interlace type %d!\n", pExtraFrameInfo->interlaceType);
     if(pExtraFrameInfo->interlaceType != OMX_QCOM_InterlaceFrameProgressive)
@@ -2156,41 +2192,57 @@ void render_fb(struct OMX_BUFFERHEADERTYPE *pBufHdr)
             destH = vinfo.yres;
     }
 
+    if(portFmt.format.video.nFrameWidth < destW)
+    {
+      if(pExtraFrameDimension)
+        destW=pExtraFrameDimension->nActualWidth;
+      else
+         destW = portFmt.format.video.nFrameWidth ;
+    }
 
-        if(portFmt.format.video.nFrameWidth < destW)
-          destW = portFmt.format.video.nFrameWidth ;
+    if(portFmt.format.video.nFrameHeight < destH)
+    {
+      if(pExtraFrameDimension)
+        destH=pExtraFrameDimension->nActualHeight;
+      else
+        destH = portFmt.format.video.nFrameHeight;
+    }
 
+    e->dst_rect.x = destx;
+    e->dst_rect.y = desty;
+    e->dst_rect.w = destW;
+    e->dst_rect.h = destH;
 
-        if(portFmt.format.video.nFrameHeight < destH)
-           destH = portFmt.format.video.nFrameHeight;
+    //e->dst_rect.w = 800;
+    //e->dst_rect.h = 480;
 
-	e->dst_rect.x = destx;
-	e->dst_rect.y = desty;
-	e->dst_rect.w = destW;
-	e->dst_rect.h = destH;
+    e->src_rect.x = 0;
+    e->src_rect.y = 0;
 
-	//e->dst_rect.w = 800;
-	//e->dst_rect.h = 480;
+    if(pExtraFrameDimension)
+    {
+      e->src_rect.w = pExtraFrameDimension->nActualWidth;
+      e->src_rect.h = pExtraFrameDimension->nActualHeight;
+    }else{
+      e->src_rect.w = portFmt.format.video.nFrameWidth;
+      e->src_rect.h = portFmt.format.video.nFrameHeight;
+    }
 
-	e->src_rect.x = 0;
-	e->src_rect.y = 0;
-    e->src_rect.w = portFmt.format.video.nFrameWidth;
-	e->src_rect.h = portFmt.format.video.nFrameHeight;
+    //e->src_rect.w = portFmt.format.video.nStride;
+    //e->src_rect.h = portFmt.format.video.nSliceHeight;
 
-	//e->src_rect.w = portFmt.format.video.nStride;
-	//e->src_rect.h = portFmt.format.video.nSliceHeight;
+    if (ioctl(fb_fd, MSMFB_BLIT, &img)) {
+	QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,"MSMFB_BLIT ioctl failed!\n");
+	return;
+    }
 
-	if (ioctl(fb_fd, MSMFB_BLIT, &img)) {
-		QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,"MSMFB_BLIT ioctl failed!\n");
-		return;
-	}
-
-	if (ioctl(fb_fd, FBIOPAN_DISPLAY, &vinfo) < 0) {
-		QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,
+    if (ioctl(fb_fd, FBIOPAN_DISPLAY, &vinfo) < 0)
+    {
+       QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,
                   "FBIOPAN_DISPLAY failed! line=%d\n", __LINE__);
-		return;
-	}
+	return;
+    }
 
-	QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,"render_fb complete!\n");
+    QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,"render_fb complete!\n");
 }
 

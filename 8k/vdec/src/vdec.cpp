@@ -83,11 +83,7 @@ int timestamp = 0;
 static int getExtraDataSize()
 {
    int extraSize =
-       ((OMX_EXTRADATA_HEADER_SIZE + sizeof(OMX_QCOM_EXTRADATA_FRAMEINFO) +
-         3) & (~3)) + ((OMX_EXTRADATA_HEADER_SIZE +
-              sizeof(OMX_QCOM_EXTRADATA_CODEC_DATA) +
-              3) & (~3)) + (OMX_EXTRADATA_HEADER_SIZE + 4);
-   return extraSize;
+       ((OMX_EXTRADATA_HEADER_SIZE + sizeof(OMX_QCOM_EXTRADATA_FRAMEINFO)+3) & (~3)) + ((OMX_EXTRADATA_HEADER_SIZE+sizeof(OMX_QCOM_EXTRADATA_CODEC_DATA)+3) & (~3)) + ((OMX_EXTRADATA_HEADER_SIZE+sizeof(OMX_QCOM_EXTRADATA_FRAMEDIMENSION)+3) & (~3))+(OMX_EXTRADATA_HEADER_SIZE + 4);                                                                                                                        return extraSize;
 }
 
 void vdec_frame_cb_handler(void *vdec_context,

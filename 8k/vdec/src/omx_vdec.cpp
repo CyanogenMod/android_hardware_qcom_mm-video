@@ -2204,6 +2204,7 @@ OMX_ERRORTYPE omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE hComp,
             portDefn->bEnabled = m_inp_bEnabled;
             portDefn->bPopulated = m_inp_bPopulated;
          } else if (1 == portDefn->nPortIndex) {
+	    int extraDataSize;
             portDefn->eDir = OMX_DirOutput;
             if (m_vdec) {
                portDefn->nBufferCountActual =
@@ -2216,8 +2217,7 @@ OMX_ERRORTYPE omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE hComp,
                portDefn->nBufferCountMin =
                    m_out_buf_count;
             }
-            portDefn->nBufferSize =
-                m_port_height * m_port_width * 3 / 2;
+            extraDataSize = get_extradata_size();                                                                                               portDefn->nBufferSize = m_height * m_width * 3/2  + extraDataSize;
             portDefn->format.video.eColorFormat =
                 m_color_format;
             portDefn->format.video.eCompressionFormat =
@@ -8833,6 +8833,7 @@ void omx_vdec::fill_extradata(OMX_INOUT OMX_BUFFERHEADERTYPE * pBufHdr,
    uint32 end = (uint32) (pBufHdr->pBuffer + pBufHdr->nAllocLen);
    OMX_OTHER_EXTRADATATYPE *pExtraData = 0;
    OMX_QCOM_EXTRADATA_FRAMEINFO *pExtraFrameInfo = 0;
+   OMX_QCOM_EXTRADATA_FRAMEDIMENSION *pExtraFrameDimension = 0;
    OMX_QCOM_EXTRADATA_CODEC_DATA *pExtraCodecData = 0;
    uint32 size = 0;
    pBufHdr->nFlags |= OMX_BUFFERFLAG_EXTRADATA;
@@ -8918,6 +8919,25 @@ void omx_vdec::fill_extradata(OMX_INOUT OMX_BUFFERHEADERTYPE * pBufHdr,
       pExtraCodecData->vc1ExtraData.eVC1PicResolution =
           (OMX_QCOM_VC1RESOLUTIONTYPE) frameDetails->ePicResolution;
    }
+
+   // append the Height and Width adjusted to multiple of 16  and Actual Height and Width
+   addr += size;
+   pExtraData = (OMX_OTHER_EXTRADATATYPE *)addr;
+   size = (OMX_EXTRADATA_HEADER_SIZE + sizeof(OMX_QCOM_EXTRADATA_FRAMEDIMENSION) + 3 ) & (~3);
+   pExtraData->nSize = size;
+   pExtraData->nVersion.nVersion = OMX_SPEC_VERSION;
+   pExtraData->nPortIndex = 1;
+   if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.avc", 26) == 0)
+   {
+      pExtraData->eType = (OMX_EXTRADATATYPE) OMX_ExtraDataFrameDimension;
+      pExtraData->nDataSize = sizeof(OMX_QCOM_EXTRADATA_FRAMEDIMENSION);    /* Size of the supporting data to follow */
+      pExtraFrameDimension = (OMX_QCOM_EXTRADATA_FRAMEDIMENSION *)pExtraData->data;
+      pExtraFrameDimension->nDecWidth  = frameDetails->nDecPicWidth;
+      pExtraFrameDimension->nDecHeight = frameDetails->nDecPicHeight;
+      pExtraFrameDimension->nActualWidth = frameDetails->cwin.x2 - frameDetails->cwin.x1;
+      pExtraFrameDimension->nActualHeight= frameDetails->cwin.y2 - frameDetails->cwin.y1;
+   }
+
    // append extradata terminator
    addr += size;
    pExtraData = (OMX_OTHER_EXTRADATATYPE *) addr;
@@ -8928,7 +8948,10 @@ void omx_vdec::fill_extradata(OMX_INOUT OMX_BUFFERHEADERTYPE * pBufHdr,
    pExtraData->nDataSize = 0;
 
    pBufHdr->nOffset = 0;
-
+   if (frameDetails->cwin.x1 || frameDetails->cwin.y1)
+   {
+      pBufHdr->nOffset = frameDetails->cwin.y1 * frameDetails->nDecPicWidth + frameDetails->cwin.x1;
+   }
 }
 
 /* ======================================================================

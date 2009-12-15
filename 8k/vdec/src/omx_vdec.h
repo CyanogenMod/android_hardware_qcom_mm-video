@@ -501,6 +501,10 @@ class omx_vdec:public qc_omx_component, public omx_vdec_inpbuf {
                      source,
                      OMX_INOUT bool * isPartialFrame);
 
+   int get_extradata_size(void)
+   {
+       return ((OMX_EXTRADATA_HEADER_SIZE + sizeof(OMX_QCOM_EXTRADATA_FRAMEINFO)+3) & (~3))+((OMX_EXTRADATA_HEADER_SIZE+sizeof(OMX_QCOM_EXTRADATA_CODEC_DATA)+3) & (~3))+((OMX_EXTRADATA_HEADER_SIZE+sizeof(OMX_QCOM_EXTRADATA_FRAMEDIMENSION) + 3) & (~3))+(OMX_EXTRADATA_HEADER_SIZE + 4);                                                                                                                   }
+
    void fill_extradata(OMX_INOUT OMX_BUFFERHEADERTYPE * pBufHdr,
              OMX_IN vdec_frame * frame);
 
