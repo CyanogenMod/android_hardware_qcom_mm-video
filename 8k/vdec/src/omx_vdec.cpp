@@ -1160,9 +1160,7 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
       eRet = OMX_ErrorInvalidComponentName;
    }
 
-   if ((strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.mpeg4", 28) == 0)
-       || (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.h263", 27) ==
-      0)) {
+   if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.mpeg4", 28) == 0) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
               "Mp4 output buffer Count updated\n");
       m_out_buf_count = OMX_CORE_NUM_OUTPUT_BUFFERS_MP4;
@@ -1173,6 +1171,11 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
       m_divX_buffer_info.parsing_required = true;
       m_mp4_utils = new MP4_Utils();
       m_b_display_order = true;
+   } else if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.h263", 27) ==
+              0) {
+      m_out_buf_count = OMX_CORE_NUM_OUTPUT_BUFFERS_MP4;
+      m_outstanding_frames = -OMX_CORE_NUM_OUTPUT_BUFFERS_MP4;
+      m_mp4_utils = new MP4_Utils();
    } else if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.avc", 26) ==
          0) {
       m_h264_utils = new H264_Utils();
