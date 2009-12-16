@@ -37,9 +37,22 @@ extern "C" {
    enum {
       ADSP_BUFFER_TYPE_INPUT,
       ADSP_BUFFER_TYPE_OUTPUT,
-      ADSP_BUFFER_TYPE_INTERNAL1,
-      ADSP_BUFFER_TYPE_INTERNAL2,
+      ADSP_BUFFER_TYPE_INTERNAL,
    };
+   enum {
+	ADSP_PROPERTY_FOURCC,
+	ADSP_PROPERTY_PROFILE,
+	ADSP_PROPERTY_LEVEL,
+	ADSP_PROPERTY_DIMENSION,
+	ADSP_PROPERTY_CWIN,
+	ADSP_PROPERTY_INPUT_BUF_REQ,
+	ADSP_PROPERTY_OUTPUT_BUF_REQ
+};
+   enum {
+    ADSP_COLOR_FORMAT_NV21 = 0x01,
+    ADSP_COLOR_FORMAT_NV21_YAMOTO = 0x02,
+   };
+
    struct adsp_module;
    struct adsp_pmem_info;
    struct adsp_buffers {
@@ -50,6 +63,7 @@ extern "C" {
 
    struct adsp_buffer_info {
       unsigned int buf_type;
+      unsigned int buf_index;
       struct adsp_buffers buf;
       unsigned int numbuf;
       unsigned int is_last;
@@ -63,11 +77,11 @@ extern "C" {
       unsigned int maxnum_input_buf;
       struct adsp_buf_data input;
       struct adsp_buf_data output;
-      struct adsp_buf_data dec_req1;
-      struct adsp_buf_data dec_req2;
+      unsigned int num_int_buf;
    };
    struct adsp_init {
       unsigned int seq_len;
+      struct adsp_buffers seq_hdr;
       unsigned int width;
       unsigned int height;
       unsigned int order;
@@ -78,8 +92,8 @@ extern "C" {
       unsigned int h264_nal_len_size;
       unsigned int postproc_flag;
       unsigned int fruc_enable;
+      unsigned int color_format;
       unsigned int reserved;
-      unsigned char *seq_header;
       struct adsp_buf_req *buf_req;
    };
    struct adsp_input_buf {
@@ -91,6 +105,12 @@ extern "C" {
       int timestamp_hi;
       int avsync_state;
       unsigned int flags;
+   };
+   struct adsp_intbuf_req {
+     unsigned int num_internal_buf;
+     unsigned int num_actual_internal_buf;
+     Vdec_BufferRequirements *internal_buf_req;
+     unsigned int internal_buf_filled;
    };
 
    typedef void (*adsp_msg_frame_done_func) (void *context,
@@ -107,16 +127,22 @@ extern "C" {
       adsp_msg_buffer_done_func buffer_done;
    };
 
+   struct adsp_cropping_window {
+	u32 x1;
+	u32 y1;
+	u32 x2;
+	u32 y2;
+   };
+
    struct adsp_dec_attr {
       unsigned int fourcc;
       unsigned int profile;
       unsigned int level;
       unsigned int dec_pic_width;
       unsigned int dec_pic_height;
+      struct adsp_cropping_window cwin;
       struct adsp_buf_data input;
       struct adsp_buf_data output;
-      struct adsp_buf_data dec_req1;
-      struct adsp_buf_data dec_req2;
    };
 
    struct adsp_module *adsp_open(const char *name,
@@ -136,6 +162,8 @@ extern "C" {
                struct adsp_buffer_info bufinfo);
    int adsp_get_dec_attr(struct adsp_module *mod,
                struct adsp_dec_attr *attr);
+   int adsp_get_internal_buf_req(struct adsp_module *mod,
+               struct adsp_intbuf_req *int_req);
 
 #ifdef __cplusplus
 }

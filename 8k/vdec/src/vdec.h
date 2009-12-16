@@ -324,8 +324,9 @@ extern "C" {
       void *adsp_module;
       struct vdec_context *ctxt;
       void *thread_specific_info;
-      Vdec_BufferRequirements decReq1;
-      Vdec_BufferRequirements decReq2;
+      Vdec_BufferRequirements *decReq;
+      unsigned int num_actual_decReq;
+      unsigned int num_hw_filled_decReq;
    };
 
 /**
