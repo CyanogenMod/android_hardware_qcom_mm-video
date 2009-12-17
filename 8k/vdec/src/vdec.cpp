@@ -782,7 +782,7 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
    } else if (!strcmp(dec->ctxt->kind, "OMX.qcom.video.decoder.vc1")) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
               "vdec: Opening VC1 Decoder \n");
-      init.fourcc = MAKEFOURCC('w', 'v', 'c', '1');
+      init.fourcc = MAKEFOURCC('w', 'm', 'v', '3');
       init.order = 0;
    } else {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
