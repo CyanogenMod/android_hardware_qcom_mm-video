@@ -441,6 +441,9 @@ void omx_vdec::frame_done_display_order_cb(struct vdec_context *ctxt, struct vde
     {
       pThis->frame_done_cb(ctxt, frame);
     }
+    else if (frame->flags & FRAME_FLAG_FLUSHED) {
+      pThis->frame_done_cb(ctxt, frame);
+    }
     else
     {
       pThis->m_pPrevFrame = frame;
