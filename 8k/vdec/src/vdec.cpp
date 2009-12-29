@@ -771,6 +771,7 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
    init.color_format = ADSP_COLOR_FORMAT_NV21;
    init.height = dec->ctxt->height;
    init.order = 1;
+   init.fourcc = dec->ctxt->fourcc;
    init.notify_enable = 1;
    init.h264_nal_len_size = dec->ctxt->size_of_nal_length_field;
    init.h264_startcode_detect = 0;
@@ -786,23 +787,23 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
    if (!strcmp(dec->ctxt->kind, "OMX.qcom.video.decoder.avc")) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
               "vdec: Opening H264 Decoder \n");
-      init.fourcc = MAKEFOURCC('h', '2', '6', '4');
       init.order = 0;
    } else if (!strcmp(dec->ctxt->kind, "OMX.qcom.video.decoder.mpeg4")) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
               "vdec: Opening MPEG4 Decoder \n");
-      init.fourcc = MAKEFOURCC('m', 'p', '4', 'v');
+      init.order = 0;
+   } else if (!strcmp(dec->ctxt->kind, "OMX.qcom.video.decoder.divx")) {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
+              "vdec: Opening Divx Decoder \n");
       init.order = 1;
-   } else if (!strcmp(dec->ctxt->kind, "OMX.qcom.video.decoder.h263")) {
+   }else if (!strcmp(dec->ctxt->kind, "OMX.qcom.video.decoder.h263")) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
               "vdec: Opening H263 Decoder \n");
-      init.fourcc = MAKEFOURCC('h', '2', '6', '3');
-      init.order = 0;
+     init.order = 0;
    } else if (!strcmp(dec->ctxt->kind, "OMX.qcom.video.decoder.vc1")) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
               "vdec: Opening VC1 Decoder \n");
-      init.fourcc = MAKEFOURCC('w', 'm', 'v', '3');
-      init.order = 0;
+     init.order = 0;
    } else {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "Incorrect codec kind\n");

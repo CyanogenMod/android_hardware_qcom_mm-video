@@ -700,6 +700,8 @@ class omx_vdec:public qc_omx_component, public omx_vdec_inpbuf {
     } omx_mp4_divX_buffer_info;
 
     omx_mp4_divX_buffer_info            m_divX_buffer_info;
+    uint32 m_codec_format;
+    uint32 m_codec_profile;
 };
 
 #endif // __OMX_VDEC_H__
