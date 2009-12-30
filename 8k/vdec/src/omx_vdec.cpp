@@ -303,6 +303,7 @@ m_pPrevFrame(NULL)
    memset(&m_cmp, 0, sizeof(m_cmp));
    memset(&m_cb, 0, sizeof(m_cb));
    memset(&m_vdec_cfg, 0, sizeof(m_vdec_cfg));
+   m_vdec_cfg.vdec_fd = -1;
    memset(&m_frame_info, 0, sizeof(m_frame_info));
    memset(m_out_bm_count, 0x0, (OMX_CORE_NUM_OUTPUT_BUFFERS + 7) / 8);
 
@@ -1084,7 +1085,9 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
       // Another decoder instance is running. return from here.
       return OMX_ErrorInsufficientResources;
    }
-   close(fd);
+   //close(fd);
+   m_vdec_cfg.vdec_fd =  fd;
+
 
    if(0 != property_get("persist.omxvideo.arb-bytes", property_value, NULL))
    {
@@ -6260,8 +6263,15 @@ OMX_ERRORTYPE omx_vdec::component_deinit(OMX_IN OMX_HANDLETYPE hComp) {
 
    if (m_vdec) {
       vdec_close(m_vdec);
+      m_vdec_cfg.vdec_fd = -1;
       m_vdec = NULL;
    }
+
+   if (m_vdec_cfg.vdec_fd >= 0) {
+      close(m_vdec_cfg.vdec_fd);
+      m_vdec_cfg.vdec_fd = -1;
+   }
+
    if (m_inp_mem_ptr) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
               "Freeing the Input Memory\n");

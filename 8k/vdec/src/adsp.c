@@ -255,7 +255,7 @@ void adsp_close(struct adsp_module *mod)
 }
 
 struct adsp_module *adsp_open(const char *name, struct adsp_open_info info,
-               void *context)
+               void *context, int32 vdec_fd)
 {
 
    QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW, "adsp_open: %s", name);
@@ -281,12 +281,15 @@ struct adsp_module *adsp_open(const char *name, struct adsp_open_info info,
       goto fail_thread;
    }
 
-   mod->fd = open("/dev/vdec", O_RDWR);
-   if (mod->fd < 0) {
-      QTV_MSG_PRIO3(QTVDIAG_GENERAL, QTVDIAG_PRIO_FATAL,
-               "adsp: cannot open '%s', fd: %d (%s)\n", name,
-               mod->fd, strerror(errno));
-      goto fail_open;
+   mod->fd = vdec_fd;
+   if(mod->fd < 0) {
+      mod->fd = open("/dev/vdec", O_RDWR);
+      if (mod->fd < 0) {
+         QTV_MSG_PRIO3(QTVDIAG_GENERAL, QTVDIAG_PRIO_FATAL,
+                  "adsp: cannot open '%s', fd: %d (%s)\n", name,
+                  mod->fd, strerror(errno));
+         goto fail_open;
+      }
    }
    mod->cpu_dma_fd = open("/dev/cpu_dma_latency", O_RDWR);
    if(mod->cpu_dma_fd < 0) {

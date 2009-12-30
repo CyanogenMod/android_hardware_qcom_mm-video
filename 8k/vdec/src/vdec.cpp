@@ -745,7 +745,7 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
    openinfo.buffer_done = vdec_reuse_input_cb_handler;
 
    dec->adsp_module =
-       (void *)adsp_open("/dev/vdec", openinfo, (void *)dec);
+       (void *)adsp_open("/dev/vdec", openinfo, (void *)dec, dec->ctxt->vdec_fd );
 
    if (NULL == dec->adsp_module) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,

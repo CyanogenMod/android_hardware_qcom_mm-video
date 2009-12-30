@@ -256,6 +256,7 @@ extern "C" {
       unsigned int size_of_nal_length_field;
       uint32 vc1Rowbase;
       uint32 postProc;
+      int32 vdec_fd;
 
       /////////////////////////////////To be removed in future.
       char kind[128];   // new code to pass the role from omx vdec.

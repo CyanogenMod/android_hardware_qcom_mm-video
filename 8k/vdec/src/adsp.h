@@ -147,7 +147,7 @@ extern "C" {
 
    struct adsp_module *adsp_open(const char *name,
                   struct adsp_open_info info,
-                  void *context);
+                  void *context, int32 vdec_fd);
 
    void adsp_close(struct adsp_module *mod);
    int adsp_set_buffers(struct adsp_module *mod,
