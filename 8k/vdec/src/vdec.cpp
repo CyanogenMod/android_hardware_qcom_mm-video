@@ -738,6 +738,8 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
 
    dec->thread_specific_info = (void *)pthread_info;
    dec->ctxt = ctxt;
+   arena.fd = -1;
+   arena.size = 0;
 
    openinfo.frame_done = vdec_frame_cb_handler;
    openinfo.buffer_done = vdec_reuse_input_cb_handler;
@@ -751,19 +753,19 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
       goto fail_open;
    }
 
-   seq_pmem_size = Q6_VDEC_PAGE_ALIGN(dec->ctxt->sequenceHeaderLen);
-   if (pmem_alloc(&arena, seq_pmem_size)) {
-      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+   if(dec->ctxt->sequenceHeader && dec->ctxt->sequenceHeaderLen > 0 ) {
+      seq_pmem_size = Q6_VDEC_PAGE_ALIGN(dec->ctxt->sequenceHeaderLen);
+      if (pmem_alloc(&arena, seq_pmem_size)) {
+         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
                "vdec_open: failed to allocate input pmem arena (%d bytes)\n",
                seq_pmem_size);
-      goto fail_initialize;
+         goto fail_initialize;
+      }
+       memcpy(arena.data, dec->ctxt->sequenceHeader, dec->ctxt->sequenceHeaderLen);
    }
-
-
    init.seq_hdr.pmem_id = arena.fd;
    init.seq_hdr.offset  = 0;
    init.seq_hdr.size     = arena.size;
-   memcpy(arena.data, dec->ctxt->sequenceHeader, dec->ctxt->sequenceHeaderLen);
    init.seq_len = dec->ctxt->sequenceHeaderLen;
    init.width = dec->ctxt->width;
    init.color_format = ADSP_COLOR_FORMAT_NV21;

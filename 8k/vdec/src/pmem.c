@@ -145,9 +145,11 @@ void pmem_free(struct pmem *pmem)
    free(pmem->data);
    pmem->data = 0;
 #else
-   close(pmem->fd);
-   pmem->fd = -1;
-   munmap(pmem->data, pmem->size);
+   if(pmem->fd >= 0) {
+       close(pmem->fd);
+       pmem->fd = -1;
+       munmap(pmem->data, pmem->size);
+   }
 #endif
 }
 
