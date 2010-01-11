@@ -1564,25 +1564,13 @@ bool H264_Utils::validate_profile_and_level(uint32 profile, uint32 level)
 {
    QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
             "H264 profile %d, level %d\n", profile, level);
-   (void)level;
-   long hxw = 0;
 
-   /* 7k will support baseline profile only */
    if ((m_default_profile_chk &&
         profile != BASELINE_PROFILE &&
         profile != MAIN_PROFILE &&
         profile != HIGH_PROFILE) || (m_default_level_chk && level > MAX_SUPPORTED_LEVEL)
        ) {
       return false;
-   }
-
-   if(m_default_profile_chk)
-   {
-       hxw = m_height * m_width;
-       if ((profile == MAIN_PROFILE || profile == HIGH_PROFILE) &&
-           (hxw >= (OMX_CORE_720P_HEIGHT * OMX_CORE_720P_WIDTH))) {
-           return false;
-       }
    }
 
    return true;
