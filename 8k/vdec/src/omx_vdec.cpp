@@ -8078,7 +8078,6 @@ OMX_ERRORTYPE omx_vdec::
                 m_last_start_code = code;
             dest->nFilledLen -= (scl - 1 - readSize);
             dest->nFlags = source->nFlags;
-            dest->nTimeStamp = source->nTimeStamp;
             *isPartialFrame = false;
             m_is_copy_truncated = false;
             readSize++;
