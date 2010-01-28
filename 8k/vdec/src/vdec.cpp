@@ -675,7 +675,7 @@ Vdec_ReturnType vdec_commit_memory(struct VDecoder * dec)
    }
 
    for (i= 0; i < dec->num_hw_filled_decReq; i++) {
-      if (dec->decReq[i].numMinBuffers) {
+      if (dec->decReq[i].numMinBuffers && dec->decReq[i].bufferSize) {
       adsp_buf_info.buf.pmem_id = dec->arena[pmembuf_cnt].fd;
       adsp_buf_info.buf.offset = dec_offset[i];
       adsp_buf_info.buf_index = i;
