@@ -4825,8 +4825,7 @@ OMX_ERRORTYPE omx_vdec::
    unsigned nBufferIndex =
        buffer - ((OMX_BUFFERHEADERTYPE *) m_inp_mem_ptr);
    if (m_event_port_settings_sent == true) {
-      if (m_bAccumulate_subframe == false
-          || (buffer->nFlags & OMX_BUFFERFLAG_EOS)) {
+      if (m_bAccumulate_subframe == false) {
          add_entry(nBufferIndex);
          return OMX_ErrorNone;
       } else {
@@ -5836,6 +5835,12 @@ OMX_ERRORTYPE omx_vdec::
                 buffer->nFilledLen);
          m_pcurrent_frame->nFilledLen += buffer->nFilledLen;
          m_pcurrent_frame->nTimeStamp = buffer->nTimeStamp;
+
+         if(buffer->nFlags & OMX_BUFFERFLAG_EOS ) {
+             m_pcurrent_frame->nFlags |= buffer->nFlags;
+             add_entry(nBufferIndex);
+         }
+
       } else if (find_extra_buffer_index(buffer->pBuffer) != -1) {
          QTV_MSG_PRIO4(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
                   "Buffer %p must be an extra buffer size of current len %d extra len %d extra offset %d\n",
@@ -6088,6 +6093,7 @@ unsigned omx_vdec::push_one_input_buffer(OMX_IN OMX_BUFFERHEADERTYPE * buffer) {
       m_frame_info.data = buffer->pBuffer + buffer->nOffset;
       m_frame_info.len = buffer->nFilledLen;
       m_frame_info.timestamp = buffer->nTimeStamp;
+      m_frame_info.flags = buffer->nFlags;
       remove_top_entry();
       int nRet =
           vdec_post_input_buffer(m_vdec, &(m_frame_info), buffer,
