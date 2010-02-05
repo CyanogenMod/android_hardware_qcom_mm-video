@@ -49,7 +49,11 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "omx_vdec.h"
 #include <string.h>
 #include <stdlib.h>
+
+#ifdef _ANDROID_
 #include "cutils/properties.h"
+#endif
+
 #include "qtv_msg.h"
 
 /* =======================================================================
@@ -166,6 +170,7 @@ void H264_Utils::allocate_rbsp_buffer(uint32 inputBufferSize)
 H264_Utils::H264_Utils():m_height(0), m_width(0), m_rbspBytes(NULL),
     m_default_profile_chk(true), m_default_level_chk(true)
 {
+#ifdef _ANDROID_
    char property_value[PROPERTY_VALUE_MAX] = {0};
    if(0 != property_get("persist.omxvideo.profilecheck", property_value, NULL))
    {
@@ -192,7 +197,7 @@ H264_Utils::H264_Utils():m_height(0), m_width(0), m_rbspBytes(NULL),
        QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR, "H264_Utils:: Constr failed in \
            getting value for the Android property [persist.omxvideo.levelcheck]");
    }
-
+#endif
    initialize_frame_checking_environment();
 }
 

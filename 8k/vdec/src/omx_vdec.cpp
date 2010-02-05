@@ -45,7 +45,11 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+
+#ifdef _ANDROID_
 #include "cutils/properties.h"
+#endif //_ANDROID_
+
 #include "adsp.h"
 #include "omx_vdec.h"
 #include "MP4_Utils.h"
@@ -1079,7 +1083,9 @@ RETURN VALUE
 OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
 {
 
+#ifdef _ANDROID_
    char property_value[PROPERTY_VALUE_MAX] = {0};
+#endif
    OMX_ERRORTYPE eRet = OMX_ErrorNone;
    int r, fd;
 
@@ -1094,7 +1100,7 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
    //close(fd);
    m_vdec_cfg.vdec_fd =  fd;
 
-
+#ifdef _ANDROID_
    if(0 != property_get("persist.omxvideo.arb-bytes", property_value, NULL))
    {
        if(!strcmp(property_value, "false"))
@@ -1133,6 +1139,7 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
        QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR, "OMX_VDEC:: Comp Init failed in \
            getting value for the Android property [persist.omxvideo.accsubframe]");
    }
+#endif
 
    m_vdec_cfg.buffer_done = buffer_done_cb_stub;
    m_vdec_cfg.frame_done = frame_done_cb_stub;
