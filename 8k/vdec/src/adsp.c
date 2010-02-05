@@ -339,7 +339,7 @@ struct adsp_module *adsp_open(const char *name, struct adsp_open_info info,
 
 int adsp_set_buffers(struct adsp_module *mod, struct adsp_buffer_info bufinfo)
 {
-   struct vdec_buffer_v3 mem;
+   struct vdec_buffer mem;
    int r;
 
    if (NULL == mod) {
@@ -352,12 +352,12 @@ int adsp_set_buffers(struct adsp_module *mod, struct adsp_buffer_info bufinfo)
    mem.buf.buf_type = bufinfo.buf_type;
    mem.buf.num_buf = bufinfo.numbuf;
    mem.buf.islast = bufinfo.is_last;
-   mem.buf.index = bufinfo.buf_index;
+
    mem.buf.region.src_id = 0x0106e429;
    mem.buf.region.offset = bufinfo.buf.offset;
    mem.buf.region.size = bufinfo.buf.size;
 
-   if (ioctl(mod->fd, VDEC_IOCTL_SETBUFFERS_V3, &mem) < 0) {
+   if (ioctl(mod->fd, VDEC_IOCTL_SETBUFFERS, &mem) < 0) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "VDEC_IOCTL_SETBUFFERS failed\n");
       mod->dead = 1;
@@ -372,7 +372,7 @@ int adsp_set_buffers(struct adsp_module *mod, struct adsp_buffer_info bufinfo)
 
 int adsp_free_buffers(struct adsp_module *mod, struct adsp_buffer_info bufinfo)
 {
-   struct vdec_buffer_v3 mem;
+   struct vdec_buffer mem;
    int r;
 
    if (NULL == mod) {
@@ -390,7 +390,7 @@ int adsp_free_buffers(struct adsp_module *mod, struct adsp_buffer_info bufinfo)
    mem.buf.region.offset = bufinfo.buf.offset;
    mem.buf.region.size = bufinfo.buf.size;
 
-   if (ioctl(mod->fd, VDEC_IOCTL_FREEBUFFERS_V3, &mem) < 0) {
+   if (ioctl(mod->fd, VDEC_IOCTL_FREEBUFFERS, &mem) < 0) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "VDEC_IOCTL_SETBUFFERS failed\n");
       return -1;
@@ -402,8 +402,8 @@ int adsp_free_buffers(struct adsp_module *mod, struct adsp_buffer_info bufinfo)
 
 int adsp_init(struct adsp_module *mod, struct adsp_init *init)
 {
-   struct vdec_init_v3 vi;
-   struct vdec_buf_req_v3 buf;
+   struct vdec_init vi;
+   struct vdec_buf_req buf;
    if (NULL == mod) {
       QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW,
                "adsp_init() mod NULL: 0x%x\n", mod);
@@ -421,17 +421,13 @@ int adsp_init(struct adsp_module *mod, struct adsp_init *init)
    vi.sps_cfg.cfg.postproc_flag = init->postproc_flag;
    vi.sps_cfg.cfg.fruc_enable = init->fruc_enable;
    vi.sps_cfg.cfg.reserved = init->reserved;
-   vi.sps_cfg.cfg.color_format= init->color_format;
-   vi.sps_cfg.cfg.seq_hdr_len= init->seq_len;
-   vi.sps_cfg.cfg.seq_hdr.src_id= 0x0106e429;
-   vi.sps_cfg.cfg.seq_hdr.offset= init->seq_hdr.offset;
-   vi.sps_cfg.cfg.seq_hdr.size= init->seq_hdr.size;
-   vi.sps_cfg.seq_fd = init->seq_hdr.pmem_id;
+   vi.sps_cfg.seq.header = init->seq_header;
+   vi.sps_cfg.seq.len = init->seq_len;
    vi.buf_req = &buf;
 
    QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
             "Before ioctl initialize %d\n", mod->fd);
-   if (ioctl(mod->fd, VDEC_IOCTL_INITIALIZE_V3, &vi) < 0) {
+   if (ioctl(mod->fd, VDEC_IOCTL_INITIALIZE, &vi) < 0) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "VDEC_IOCTL_INITIALIZE failed\n");
       mod->dead = 1;
@@ -443,7 +439,16 @@ int adsp_init(struct adsp_module *mod, struct adsp_init *init)
    init->buf_req->output.bufnum_min = vi.buf_req->output.num_min_buffers;
    init->buf_req->output.bufnum_max = vi.buf_req->output.num_max_buffers;
    init->buf_req->output.bufsize = vi.buf_req->output.bufsize;
-   init->buf_req->num_int_buf = vi.buf_req->num_internal_buffers;
+   init->buf_req->dec_req1.bufnum_min =
+       vi.buf_req->dec_req1.num_min_buffers;
+   init->buf_req->dec_req1.bufnum_max =
+       vi.buf_req->dec_req1.num_max_buffers;
+   init->buf_req->dec_req1.bufsize = vi.buf_req->dec_req1.bufsize;
+   init->buf_req->dec_req2.bufnum_min =
+       vi.buf_req->dec_req2.num_min_buffers;
+   init->buf_req->dec_req2.bufnum_max =
+       vi.buf_req->dec_req2.num_max_buffers;
+   init->buf_req->dec_req2.bufsize = vi.buf_req->dec_req2.bufsize;
 
    return 0;
 
@@ -510,41 +515,4 @@ int adsp_flush(struct adsp_module *mod, unsigned int port)
            "adsp_flush() Before Flush \n");
    return ioctl(mod->fd, VDEC_IOCTL_FLUSH, &port);
 }
- int adsp_get_internal_buf_req(struct adsp_module *mod,
-               struct adsp_intbuf_req *int_req)
- {
-    struct vdec_intbuf_req vi_int_req;
-    struct vdec_buf_desc *int_buf_req;
-    struct vdec_intbuf_desc buf_desc;
-    unsigned int num_filled = 0, i;
-
-    if (NULL == mod) {
-      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW,
-               "adsp_get_internal_buf_req() mod NULL: 0x%x\n", mod);
-      return -1;
-   }
-   int_buf_req = (struct vdec_buf_desc *)
-                   malloc(int_req->num_internal_buf * sizeof(struct vdec_buf_desc));
-   vi_int_req.num_internal_buf = int_req->num_internal_buf;
-   vi_int_req.internal_buf_req = int_buf_req;
-   vi_int_req.buf_desc = &buf_desc;
-
-    if (ioctl(mod->fd, VDEC_IOCTL_GETINTERNALBUFREQ, &vi_int_req) < 0) {
-      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
-              "VDEC_IOCTL_GETINTERNALBUFREQ failed\n");
-      mod->dead = 1;
-      return -1;
-   }
-   num_filled = (vi_int_req.buf_desc->internal_buf_req_length)/sizeof(struct vdec_buf_desc);
-   for(i=0; i < num_filled; i++) {
-      int_req->internal_buf_req[i].bufferSize = vi_int_req.internal_buf_req[i].bufsize;
-      int_req->internal_buf_req[i].numMinBuffers = vi_int_req.internal_buf_req[i].num_min_buffers;
-      int_req->internal_buf_req[i].numMaxBuffers = vi_int_req.internal_buf_req[i].num_max_buffers;
-   }
-   int_req->internal_buf_filled =
-                        num_filled;
-   int_req->num_actual_internal_buf =
-                        vi_int_req.buf_desc->num_actual_internal_buf;
-   return 0;
-
- }
+ 
