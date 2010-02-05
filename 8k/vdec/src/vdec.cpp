@@ -790,6 +790,10 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
               "vdec: Opening VC1 Decoder \n");
      init.order = 0;
+   }else if (!strcmp(dec->ctxt->kind, "OMX.qcom.video.decoder.vp")) {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
+              "vdec: Opening VP6 Decoder \n");
+     init.order = 0;
    } else {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "Incorrect codec kind\n");

@@ -95,7 +95,8 @@ typedef enum {
   CODEC_FORMAT_H263,
   CODEC_FORMAT_VC1,
   CODEC_FORMAT_DIVX,
-  CODEC_FORMAT_MAX = CODEC_FORMAT_DIVX
+  CODEC_FORMAT_VP,
+  CODEC_FORMAT_MAX = CODEC_FORMAT_VP
 } codec_format;
 
 typedef enum {
@@ -115,7 +116,11 @@ typedef enum {
 
   FILE_TYPE_START_OF_DIVX_SPECIFIC = 40,
   FILE_TYPE_DIVX_4_5_6 = FILE_TYPE_START_OF_DIVX_SPECIFIC,
-  FILE_TYPE_DIVX_311
+  FILE_TYPE_DIVX_311,
+
+  FILE_TYPE_START_OF_VP_SPECIFIC = 50,
+  FILE_TYPE_VP_6 = FILE_TYPE_START_OF_VP_SPECIFIC
+
 
 } file_type;
 
@@ -222,7 +227,7 @@ static int Read_Buffer_From_DAT_File(OMX_BUFFERHEADERTYPE  *pBufHdr );
 static int Read_Buffer_ArbitraryBytes(OMX_BUFFERHEADERTYPE  *pBufHdr);
 static int Read_Buffer_From_Vop_Start_Code_File(OMX_BUFFERHEADERTYPE  *pBufHdr);
 static int Read_Buffer_From_Size_Nal(OMX_BUFFERHEADERTYPE  *pBufHdr);
-static int Read_Buffer_From_Divx_311(OMX_BUFFERHEADERTYPE  *pBufHdr);
+static int Read_Buffer_From_FrameSize_File(OMX_BUFFERHEADERTYPE  *pBufHdr);
 static int Read_Buffer_From_RCV_File_Seq_Layer(OMX_BUFFERHEADERTYPE  *pBufHdr);
 static int Read_Buffer_From_RCV_File(OMX_BUFFERHEADERTYPE  *pBufHdr);
 static int Read_Buffer_From_VC1_File(OMX_BUFFERHEADERTYPE  *pBufHdr);
@@ -555,6 +560,7 @@ int main(int argc, char **argv)
       printf(" 3--> H263\n");
       printf(" 4--> VC1\n");
       printf(" 5--> DIVX\n");
+      printf(" 6--> VP6\n");
       fflush(stdin);
       scanf("%d", &codec_format_option);
       fflush(stdin);
@@ -568,7 +574,7 @@ int main(int argc, char **argv)
       printf(" *********************************************\n");
       printf(" ENTER THE TEST CASE YOU WOULD LIKE TO EXECUTE\n");
       printf(" *********************************************\n");
-      if (codec_format_option != CODEC_FORMAT_DIVX) {
+      if (codec_format_option != CODEC_FORMAT_DIVX && codec_format_option != CODEC_FORMAT_VP) {
          printf(" 1--> PER ACCESS UNIT CLIP (.dat). Clip only available for H264 and Mpeg4\n");
          printf(" 2--> ARBITRARY BYTES (need .264/.264c/.mv4/.263/.rcv/.vc1)\n");
       }
@@ -588,6 +594,10 @@ int main(int argc, char **argv)
       else if (codec_format_option == CODEC_FORMAT_DIVX) {
         printf(" 3--> Divx clip 4, 5, 6 format\n");
         printf(" 4--> Divx clip 311 format\n");
+      }
+      else if (codec_format_option == CODEC_FORMAT_VP)
+      {
+        printf(" 3--> VP6 raw bit stream (.vp)\n");
       }
       fflush(stdin);
       scanf("%d", &file_type_option);
@@ -610,6 +620,9 @@ int main(int argc, char **argv)
           break;
         case CODEC_FORMAT_DIVX:
           file_type_option = (file_type)(FILE_TYPE_START_OF_DIVX_SPECIFIC + file_type_option - FILE_TYPE_COMMON_CODEC_MAX);
+          break;
+        case CODEC_FORMAT_VP:
+          file_type_option = (file_type)(FILE_TYPE_START_OF_VP_SPECIFIC + file_type_option - FILE_TYPE_COMMON_CODEC_MAX);
           break;
         default:
           printf("Error: Unknown code %d\n", codec_format_option);
@@ -656,6 +669,7 @@ int main(int argc, char **argv)
           case FILE_TYPE_VC1:
           case FILE_TYPE_DIVX_4_5_6:
           case FILE_TYPE_DIVX_311:
+          case FILE_TYPE_VP_6:
           {
               nalSize = 0;
               if ((file_type_option == FILE_TYPE_264_NAL_SIZE_LENGTH) ||
@@ -881,8 +895,12 @@ int run_tests()
     Read_Buffer = Read_Buffer_From_VC1_File;
   }
   else if (file_type_option == FILE_TYPE_DIVX_311) {
-    Read_Buffer = Read_Buffer_From_Divx_311;
+    Read_Buffer = Read_Buffer_From_FrameSize_File;
   }
+  else if (file_type_option == FILE_TYPE_VP_6) {
+    Read_Buffer = Read_Buffer_From_FrameSize_File;
+  }
+
 
   QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,"file_type_option %d!\n", file_type_option);
 
@@ -896,6 +914,7 @@ int run_tests()
     case FILE_TYPE_VC1:
     case FILE_TYPE_DIVX_4_5_6:
     case FILE_TYPE_DIVX_311:
+    case FILE_TYPE_VP_6:
       if(Init_Decoder()!= 0x00)
       {
         QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,"Error - Decoder Init failed\n");
@@ -1073,6 +1092,10 @@ int Init_Decoder()
     {
       strncpy(vdecCompNames, "OMX.qcom.video.decoder.divx", 28);
     }
+    else if (codec_format_option == CODEC_FORMAT_VP)
+    {
+      strncpy(vdecCompNames, "OMX.qcom.video.decoder.vp", 26);
+    }
     else
     {
       QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,
@@ -1143,6 +1166,10 @@ int Init_Decoder()
     {
       portFmt.format.video.eCompressionFormat = (OMX_VIDEO_CODINGTYPE)QOMX_VIDEO_CodingDivx;
     }
+    else if (codec_format_option == CODEC_FORMAT_VP)
+    {
+      portFmt.format.video.eCompressionFormat = (OMX_VIDEO_CODINGTYPE)QOMX_VIDEO_CodingVp;
+    }
     else
     {
       QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,
@@ -1182,6 +1209,7 @@ int Play_Decoder()
       case FILE_TYPE_RCV:
       case FILE_TYPE_DIVX_4_5_6:
       case FILE_TYPE_DIVX_311:
+      case FILE_TYPE_VP_6:
       {
         inputPortFmt.nFramePackingFormat = OMX_QCOM_FramePacking_OnlyOneCompleteFrame;
         break;
@@ -1264,6 +1292,18 @@ int Play_Decoder()
         OMX_SetParameter(dec_handle,(OMX_INDEXTYPE)OMX_QcomIndexParamVideoDivx,
                      (OMX_PTR)&paramDivx);
     }
+    else if(codec_format_option == CODEC_FORMAT_VP) {
+        QOMX_VIDEO_PARAM_VPTYPE paramVp;
+        CONFIG_VERSION_SIZE(paramVp);
+        paramVp.nPortIndex = 0;
+        if(file_type_option == FILE_TYPE_VP_6) {
+           paramVp.eFormat =  QOMX_VIDEO_VPFormat6;
+        }
+        paramVp.eProfile = QOMX_VIDEO_VPProfileAdvanced;
+        OMX_SetParameter(dec_handle,(OMX_INDEXTYPE)OMX_QcomIndexParamVideoVp,
+                     (OMX_PTR)&paramVp);
+    }
+
 
     bufCnt = 0;
     portFmt.format.video.nFrameHeight = height;
@@ -1867,7 +1907,7 @@ static int Read_Buffer_From_Size_Nal(OMX_BUFFERHEADERTYPE  *pBufHdr)
     return bytes_read + nalSize;
 }
 
-static int Read_Buffer_From_Divx_311(OMX_BUFFERHEADERTYPE  *pBufHdr)
+static int Read_Buffer_From_FrameSize_File(OMX_BUFFERHEADERTYPE  *pBufHdr)
 {
     unsigned int  size = 0, readSize =0;
     unsigned int readOffset = 0;

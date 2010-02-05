@@ -1185,6 +1185,13 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
       strncpy((char *)m_cRole, "video_decoder.divx",
          OMX_MAX_STRINGNAME_SIZE);
       m_vdec_cfg.fourcc = MAKEFOURCC('D', 'I', 'V', 'X');
+   }else
+       if (!strncmp
+      (m_vdec_cfg.kind, "OMX.qcom.video.decoder.vp",
+       OMX_MAX_STRINGNAME_SIZE)) {
+      strncpy((char *)m_cRole, "video_decoder.vp",
+         OMX_MAX_STRINGNAME_SIZE);
+      m_vdec_cfg.fourcc = MAKEFOURCC('V', 'P', '6', '0');
    } else {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "\n Unknown Component\n");
@@ -1225,6 +1232,14 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
       m_bAccumulate_subframe = true;
       m_bArbitraryBytes =  false;
       m_bAccumulate_subframe = (m_bAccumulate_subframe && m_default_accumulate_subframe);
+   } else if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.vp", 25) ==
+         0) {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+              "VP6 component init\n");
+      m_out_buf_count = OMX_CORE_NUM_OUTPUT_BUFFERS_VC1;
+      m_outstanding_frames = -OMX_CORE_NUM_OUTPUT_BUFFERS_VC1;
+      m_bAccumulate_subframe = false;
+      m_bArbitraryBytes =  false;
    }
 
    if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.vc1", 26) == 0)
@@ -2342,7 +2357,16 @@ OMX_ERRORTYPE omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE hComp,
                       OMX_COLOR_FormatUnused;
                   portFmt->eCompressionFormat =
                       (OMX_VIDEO_CODINGTYPE)QOMX_VIDEO_CodingDivx;
-               }
+               } else
+                   if (!strncmp
+                  (m_vdec_cfg.kind,
+                   "OMX.qcom.video.decoder.vp",
+                   OMX_MAX_STRINGNAME_SIZE)) {
+                  portFmt->eColorFormat =
+                      OMX_COLOR_FormatUnused;
+                  portFmt->eCompressionFormat =
+                      (OMX_VIDEO_CODINGTYPE)QOMX_VIDEO_CodingVp;
+              }
 
             } else {
                QTV_MSG_PRIO(QTVDIAG_GENERAL,
@@ -2572,6 +2596,23 @@ OMX_ERRORTYPE omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE hComp,
 
                 }
             }
+            else if (!strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.vp",OMX_MAX_STRINGNAME_SIZE))
+            {
+                if (profileLevelType->nProfileIndex == 0)
+                {
+                   profileLevelType->eProfile =  QOMX_VIDEO_VPProfileAdvanced;
+                   profileLevelType->eLevel   = QOMX_VIDEO_VPFormat6;
+                }
+                else
+                {
+                   QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "get_parameter: OMX_IndexParamVideoProfileLevelQuerySupported nProfileIndex ret NoMore %d\n",
+                  profileLevelType->nProfileIndex);
+                   eRet = OMX_ErrorNoMore;
+
+                }
+            }
+
           }
           else
           {
@@ -2819,6 +2860,16 @@ OMX_ERRORTYPE omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE hComp,
                      "OMX.qcom.video.decoder.vc1",
                      26) == 0)) {
                   m_bAccumulate_subframe = true;
+               } else if (strncmp
+                   (m_vdec_cfg.kind,
+                    "OMX.qcom.video.decoder.vp",
+                    25) == 0) {
+                     QTV_MSG_PRIO(QTVDIAG_GENERAL,
+                        QTVDIAG_PRIO_ERROR,
+                        "Setparameter: OMX_QcomIndexPortDefn - Arbitrary not supported for VP6");
+                    m_bArbitraryBytes = false;
+                    m_bAccumulate_subframe = false;
+                    eRet = OMX_ErrorUnsupportedSetting;
                }
             } else if (portFmt->nFramePackingFormat ==
                   OMX_QCOM_FramePacking_OnlyOneCompleteFrame)
@@ -2839,6 +2890,16 @@ OMX_ERRORTYPE omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE hComp,
                      "OMX.qcom.video.decoder.vc1",
                      26) == 0)) {
                   m_bAccumulate_subframe = true;
+               } else if (strncmp
+                   (m_vdec_cfg.kind,
+                    "OMX.qcom.video.decoder.vp",
+                    25) == 0) {
+                     QTV_MSG_PRIO(QTVDIAG_GENERAL,
+                        QTVDIAG_PRIO_ERROR,
+                        "Setparameter: OMX_QcomIndexPortDefn - Subframe not supported for VP6");
+                    m_bArbitraryBytes = false;
+                    m_bAccumulate_subframe = false;
+                    eRet = OMX_ErrorUnsupportedSetting;
                }
             }
          }
@@ -2941,6 +3002,25 @@ OMX_ERRORTYPE omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE hComp,
                         comp_role->cRole);
                eRet = OMX_ErrorUnsupportedSetting;
             }
+         } else
+             if (!strncmp
+            (m_vdec_cfg.kind,
+             "OMX.qcom.video.decoder.vp",
+             OMX_MAX_STRINGNAME_SIZE)) {
+            if (!strncmp
+                ((const char *)comp_role->cRole,
+                 "video_decoder.vp",
+                 OMX_MAX_STRINGNAME_SIZE)) {
+               strncpy((char *)m_cRole,
+                  "video_decoder.vp",
+                  OMX_MAX_STRINGNAME_SIZE);
+            } else {
+               QTV_MSG_PRIO1(QTVDIAG_GENERAL,
+                        QTVDIAG_PRIO_ERROR,
+                        "Setparameter: unknown Index %s\n",
+                        comp_role->cRole);
+               eRet = OMX_ErrorUnsupportedSetting;
+            }
          } else {
             QTV_MSG_PRIO1(QTVDIAG_GENERAL,
                      QTVDIAG_PRIO_ERROR,
@@ -3022,6 +3102,28 @@ OMX_ERRORTYPE omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE hComp,
               QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
                   "set_parameter: OMX_QcomIndexParamVideoDivx BAD PORT INDEX%d \n",
                   divxType->nPortIndex);
+              eRet = OMX_ErrorBadPortIndex;
+          }
+        break;
+      }
+    case  OMX_QcomIndexParamVideoVp:
+      {
+          QOMX_VIDEO_PARAM_VPTYPE *vpType =
+             (QOMX_VIDEO_PARAM_VPTYPE *) paramData;
+          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "set_parameter: OMX_QcomIndexParamVideoVp %d\n",
+                  paramIndex);
+          if(vpType->nPortIndex == 0) {
+             m_codec_format = vpType->eFormat;
+             m_codec_profile = vpType->eProfile;
+              QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "set_parameter: OMX_QcomIndexParamVideoVp Format %d, Profile %d\n",
+                  m_codec_format,m_codec_profile);
+          }
+          else {
+              QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+                  "set_parameter: OMX_QcomIndexParamVideoVp BAD PORT INDEX%d \n",
+                  vpType->nPortIndex);
               eRet = OMX_ErrorBadPortIndex;
           }
         break;
@@ -6585,6 +6687,20 @@ OMX_ERRORTYPE omx_vdec::component_role_enum(OMX_IN OMX_HANDLETYPE hComp,
                  "\n No more roles \n");
          eRet = OMX_ErrorNoMore;
       }
+   } else
+       if (!strncmp
+      (m_vdec_cfg.kind, "OMX.qcom.video.decoder.vp",
+       OMX_MAX_STRINGNAME_SIZE)) {
+      if ((0 == index) && role) {
+         strncpy((char *)role, "video_decoder.vp",
+            OMX_MAX_STRINGNAME_SIZE);
+         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "component_role_enum: role %s\n", role);
+      } else {
+         QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                 "\n No more roles \n");
+         eRet = OMX_ErrorNoMore;
+      }
    } else {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "\n Querying Role on Unknown Component\n");
@@ -6951,6 +7067,20 @@ OMX_ERRORTYPE omx_vdec::omx_vdec_check_port_settings(OMX_BUFFERHEADERTYPE *
       cropdy = height = m_crop_dy;
       cropdx = width = m_crop_dx;
 
+   } else if (!strcmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.vp")) {
+     // TODO FOR VP6
+      OMX_U8 *pBuf;
+     if (buf_len <= 8)
+        return OMX_ErrorStreamCorrupt;
+
+     pBuf = buf;
+     /* Skip the first 4 bytes to start reading the Height and Width*/
+     pBuf += 4;
+
+     cropx = cropy = 0;
+     cropdy = height = ( ((OMX_U32) (*pBuf++)) * 16);
+     cropdx = width = ( ((OMX_U32) (*pBuf)) * 16);
+     bInterlace = false;
    } else if (!strcmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.vc1")) {
       QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW, "omx_vdec_check_port_settings - start code in seq header %x\n", ((*((OMX_U32 *) buf))));   // & VC1_SP_MP_START_CODE_MASK));
       if ((((*((OMX_U32 *) buf)) & VC1_SP_MP_START_CODE_MASK) ==
@@ -7266,6 +7396,14 @@ OMX_ERRORTYPE omx_vdec::
           27) == 0) {
          QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                  "H263 clip \n");
+         m_vdec_cfg.sequenceHeaderLen = 0;
+         m_vdec_cfg.sequenceHeader = NULL;
+      } else
+          if (strncmp
+         (m_vdec_cfg.kind, "OMX.qcom.video.decoder.vp",
+          25) == 0) {
+         QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                 "VP6 clip \n");
          m_vdec_cfg.sequenceHeaderLen = 0;
          m_vdec_cfg.sequenceHeader = NULL;
       } else
