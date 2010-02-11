@@ -450,24 +450,12 @@ bool H264_Utils::isNewFrame(OMX_IN OMX_U8 * buffer,
             m_forceToStichNextNAL = false;
             break;
          }
-      case NALU_TYPE_SPS:
-      case NALU_TYPE_PPS:
-      case NALU_TYPE_SEI:
-      case NALU_TYPE_UNSPECIFIED:
-      case NALU_TYPE_ACCESS_DELIM:
-      case NALU_TYPE_EOSEQ:
-      case NALU_TYPE_EOSTREAM:
+      default:
          {
             isNewFrame =
                 (m_forceToStichNextNAL ? OMX_FALSE :
                  OMX_TRUE);
             m_forceToStichNextNAL = true;
-            break;
-         }
-      default:
-         {
-            isNewFrame = OMX_FALSE;
-            // Do not update m_forceToStichNextNAL
             break;
          }
       }      // end of switch
