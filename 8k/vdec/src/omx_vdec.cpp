@@ -2101,7 +2101,7 @@ bool omx_vdec::execute_input_flush(void)
                      (unsigned)pInpBufHdr,
                      OMX_COMPONENT_GENERATE_BUFFER_DONE);
             }
-         } while (i > 0);
+         } while (i >= 0);
       }
    }
    return bRet;
