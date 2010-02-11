@@ -456,6 +456,8 @@ Vdec_ReturnType vdec_commit_memory(struct VDecoder * dec)
           Q6_VDEC_PAGE_ALIGN(bufout_size *
                    dec->ctxt->outputReq.numMinBuffers);
 
+      QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                 "vdec: Commit: out buf size %d and tot out size %d\n",  bufout_size, total_out_size);
       bufdec1_size = 0;
       if (dec->decReq1.numMinBuffers) {
          bufdec1_size =
@@ -569,6 +571,8 @@ Vdec_ReturnType vdec_commit_memory(struct VDecoder * dec)
       total_out_size =
           Q6_VDEC_PAGE_ALIGN(bufout_size *
                    dec->ctxt->outputReq.numMinBuffers);
+      QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                 "vdec: Commit: out buf size %d and tot out size %d\n",  bufout_size, total_out_size);
 
       bufdec1_size = 0;
       if (dec->decReq1.numMinBuffers) {
@@ -590,7 +594,6 @@ Vdec_ReturnType vdec_commit_memory(struct VDecoder * dec)
       dec2_offset = Q6_VDEC_PAGE_ALIGN(dec1_offset + bufdec1_size);
       total_size = dec2_offset + bufdec2_size;
       total_size = (total_size + page_size - 1) & (~(page_size - 1));
-
       if (pmem_alloc(&arena, total_size)) {
          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
                   "vdec: failed to allocate input pmem arena (%d bytes)\n",
@@ -758,7 +761,13 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
    init.postproc_flag = dec->ctxt->postProc;
    init.vc1_rowbase = dec->ctxt->vc1Rowbase;
    init.fruc_enable = 0;
-   init.reserved = 0;
+   init.color_format = 0;
+   if (dec->ctxt->color_format ==
+              QOMX_COLOR_FormatYVU420PackedSemiPlanar32m4ka) {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
+              "vdec: Open setting color format to yamato \n");
+      init.color_format = ADSP_COLOR_FORMAT_NV21_YAMATO;
+   }
    init.buf_req = &buf;
 
    if (!strcmp(dec->ctxt->kind, "OMX.qcom.video.decoder.avc")) {
@@ -808,7 +817,6 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
             "vdec_open input numbuf= %d and bufsize= %d\n",
             dec->ctxt->inputReq.numMinBuffers,
             dec->ctxt->inputReq.bufferSize);
-
    QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
             "vdec_open output numbuf= %d and bufsize= %d\n",
             dec->ctxt->outputReq.numMinBuffers,
@@ -820,8 +828,12 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
    dec->decReq2.numMaxBuffers = init.buf_req->dec_req2.bufnum_max;
    dec->decReq2.bufferSize = init.buf_req->dec_req2.bufsize;
    QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
-            "vdec_open decoder numbuf= %d and bufsize= %d\n",
+            "vdec_open decoder1 numbuf= %d and bufsize= %d\n",
             dec->decReq1.numMinBuffers, dec->decReq1.bufferSize);
+   QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+            "vdec_open ointernal 2 numbuf= %d and bufsize= %d\n",
+            dec->decReq2.numMinBuffers,
+            dec->decReq2.bufferSize);
 
 #if LOG_YUV_FRAMES
 #ifdef T_WINNT

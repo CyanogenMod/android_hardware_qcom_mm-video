@@ -140,6 +140,7 @@ FILE * outputBufferFile;
 int takeYuvLog = 0;
 int displayYuv = 0;
 int displayWindow = 0;
+int is_yamato = 0;
 
 Queue *etb_queue = NULL;
 Queue *fbd_queue = NULL;
@@ -348,17 +349,17 @@ void* fbd_thread(void* pArg)
     }
 
     if (takeYuvLog) {
-        bytes_written = fwrite((const char *)pBuffer->pBuffer,
+          bytes_written = fwrite((const char *)pBuffer->pBuffer,
                                 pBuffer->nFilledLen,1,outputBufferFile);
-        if (bytes_written < 0) {
-            QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,
+          if (bytes_written < 0) {
+              QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,
                          "\nFillBufferDone: Failed to write to the file\n");
-        }
-        else {
-            QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,
+           }
+          else {
+              QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,
                           "\nFillBufferDone: Wrote %d YUV bytes to the file\n",
                           bytes_written);
-        }
+          }
     }
 
     /********************************************************************/
@@ -1156,8 +1157,10 @@ int Play_Decoder()
 {
     int i, bufCnt;
     int frameSize=0;
+ 
     QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,"Inside %s \n", __FUNCTION__);
     OMX_ERRORTYPE ret;
+
 
     QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,"sizeof[%d]\n", sizeof(OMX_BUFFERHEADERTYPE));
 
@@ -1202,6 +1205,21 @@ int Play_Decoder()
     }
     OMX_SetParameter(dec_handle,(OMX_INDEXTYPE)OMX_QcomIndexPortDefn,
                      (OMX_PTR)&inputPortFmt);
+
+	OMX_VIDEO_PARAM_PORTFORMATTYPE colorFormat;
+	memset(&colorFormat,0, sizeof(OMX_VIDEO_PARAM_PORTFORMATTYPE));
+	CONFIG_VERSION_SIZE(colorFormat);
+	colorFormat.nPortIndex = 1;
+	if (!is_yamato) {
+	  colorFormat.eColorFormat = (OMX_COLOR_FORMATTYPE) OMX_QCOM_COLOR_FormatYVU420SemiPlanar;
+          printf("color format nv21 %d\n", colorFormat.eColorFormat);
+        }
+	else {
+	  colorFormat.eColorFormat = (OMX_COLOR_FORMATTYPE) QOMX_COLOR_FormatYVU420PackedSemiPlanar32m4ka;
+          printf("color format nv21 yamato %d\n", colorFormat.eColorFormat);
+        }
+    OMX_SetParameter(dec_handle, (OMX_INDEXTYPE)OMX_IndexParamVideoPortFormat,
+                     (OMX_PTR)&colorFormat);
 
     /* Query the decoder outport's min buf requirements */
     CONFIG_VERSION_SIZE(portFmt);

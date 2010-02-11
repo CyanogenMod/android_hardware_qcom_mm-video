@@ -257,6 +257,7 @@ extern "C" {
       uint32 vc1Rowbase;
       uint32 postProc;
       int32 vdec_fd;
+      uint32 color_format;
 
       /////////////////////////////////To be removed in future.
       char kind[128];   // new code to pass the role from omx vdec.

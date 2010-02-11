@@ -403,10 +403,19 @@ int adsp_init(struct adsp_module *mod, struct adsp_init *init)
 {
    struct vdec_init vi;
    struct vdec_buf_req buf;
+   struct vdec_version ver;
    if (NULL == mod) {
       QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW,
                "adsp_init() mod NULL: 0x%x\n", mod);
       return -1;
+   }
+
+   /* Get the driver version */
+   if (ioctl(mod->fd, VDEC_IOCTL_GETVERSION, &ver) < 0) {
+     QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+              "VDEC_IOCTL_GETVERSION failed setting to default version\n");
+     ver.major = 1;
+     ver.minor = 0;
    }
 
    vi.sps_cfg.cfg.width = init->width;
@@ -419,13 +428,18 @@ int adsp_init(struct adsp_module *mod, struct adsp_init *init)
    vi.sps_cfg.cfg.h264_nal_len_size = init->h264_nal_len_size;
    vi.sps_cfg.cfg.postproc_flag = init->postproc_flag;
    vi.sps_cfg.cfg.fruc_enable = init->fruc_enable;
-   vi.sps_cfg.cfg.reserved = init->reserved;
+   vi.sps_cfg.cfg.color_format = init->color_format;
    vi.sps_cfg.seq.header = init->seq_header;
    vi.sps_cfg.seq.len = init->seq_len;
    vi.buf_req = &buf;
 
-   QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
-            "Before ioctl initialize %d\n", mod->fd);
+   /* set the color format based on version */
+   if (ver.major < 2 && init->color_format != 0) {
+     QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+              "VDEC_IOCTL_INITIALIZE wrong value for reserved field\n");
+     vi.sps_cfg.cfg.color_format = 0;
+   }
+
    if (ioctl(mod->fd, VDEC_IOCTL_INITIALIZE, &vi) < 0) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "VDEC_IOCTL_INITIALIZE failed\n");
@@ -514,4 +528,3 @@ int adsp_flush(struct adsp_module *mod, unsigned int port)
            "adsp_flush() Before Flush \n");
    return ioctl(mod->fd, VDEC_IOCTL_FLUSH, &port);
 }
- 

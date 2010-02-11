@@ -246,7 +246,6 @@ RETURN VALUE
 ========================================================================== */
 omx_vdec::omx_vdec():m_state(OMX_StateInvalid),
 m_app_data(NULL),
-m_color_format(OMX_COLOR_FormatYUV420Planar),
 m_loc_use_buf_hdr(NULL), m_vdec(NULL), m_inp_mem_ptr(NULL),
     //m_inp_bm_ptr(NULL),
 m_out_mem_ptr(NULL),
@@ -336,6 +335,7 @@ m_bInvalidState(false)
 
    m_vendor_config.pData = NULL;
    m_bWaitForResource = false;
+   m_color_format = (OMX_COLOR_FORMATTYPE)OMX_QCOM_COLOR_FormatYVU420SemiPlanar;
    return;
 }
 
@@ -1702,6 +1702,7 @@ OMX_ERRORTYPE omx_vdec::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
             m_vdec_cfg.width = m_port_width;
             m_vdec_cfg.size_of_nal_length_field =
                 m_nalu_bytes;
+            m_vdec_cfg.color_format = m_color_format;
             m_vdec = vdec_open(&m_vdec_cfg);
             eRet =
                 (m_vdec ==
@@ -2234,7 +2235,7 @@ OMX_ERRORTYPE omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE hComp,
             portDefn->bEnabled = m_inp_bEnabled;
             portDefn->bPopulated = m_inp_bPopulated;
          } else if (1 == portDefn->nPortIndex) {
-	    int extraDataSize;
+	    int extraDataSize,chroma_height, chroma_width;
             portDefn->eDir = OMX_DirOutput;
             if (m_vdec) {
                portDefn->nBufferCountActual =
@@ -2247,7 +2248,15 @@ OMX_ERRORTYPE omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE hComp,
                portDefn->nBufferCountMin =
                    m_out_buf_count;
             }
-            extraDataSize = get_extradata_size();                                                                                               portDefn->nBufferSize = m_height * m_width * 3/2  + extraDataSize;
+            extraDataSize = get_extradata_size();
+            if (m_color_format == QOMX_COLOR_FormatYVU420PackedSemiPlanar32m4ka) {
+               portDefn->nBufferSize = (m_height * m_width + 4095) & ~4095;
+               chroma_height = ((m_height >> 1) + 31) & ~31;
+               chroma_width = 2 * ((m_width >> 1) + 31) & ~31;
+               portDefn->nBufferSize += (chroma_height * chroma_width) + extraDataSize;
+            } else {
+               portDefn->nBufferSize = m_height * m_width * 3/2  + extraDataSize;
+            }
             portDefn->format.video.eColorFormat =
                 m_color_format;
             portDefn->format.video.eCompressionFormat =
@@ -2343,15 +2352,16 @@ OMX_ERRORTYPE omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE hComp,
                eRet = OMX_ErrorNoMore;
             }
          } else if (1 == portFmt->nPortIndex) {
-            if (0 == portFmt->nIndex) {
+            if (1 == portFmt->nIndex) {
+               portFmt->eColorFormat =
+                   (OMX_COLOR_FORMATTYPE)
+                   QOMX_COLOR_FormatYVU420PackedSemiPlanar32m4ka;
+               portFmt->eCompressionFormat =
+                   OMX_VIDEO_CodingUnused;
+            } else if (0 == portFmt->nIndex) {
                portFmt->eColorFormat =
                    (OMX_COLOR_FORMATTYPE)
                    OMX_QCOM_COLOR_FormatYVU420SemiPlanar;
-               portFmt->eCompressionFormat =
-                   OMX_VIDEO_CodingUnused;
-            } else if (1 == portFmt->nIndex) {
-               portFmt->eColorFormat =
-                   OMX_COLOR_FormatYUV420Planar;
                portFmt->eCompressionFormat =
                    OMX_VIDEO_CodingUnused;
             } else {
@@ -2777,7 +2787,7 @@ OMX_ERRORTYPE omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE hComp,
       {
          OMX_VIDEO_PARAM_PORTFORMATTYPE *portFmt =
              (OMX_VIDEO_PARAM_PORTFORMATTYPE *) paramData;
-         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
                   "set_parameter: OMX_IndexParamVideoPortFormat %d\n",
                   portFmt->eColorFormat);
          if (1 == portFmt->nPortIndex) {
@@ -6894,6 +6904,7 @@ OMX_ERRORTYPE omx_vdec::omx_vdec_check_port_settings(OMX_BUFFERHEADERTYPE *
    OMX_ERRORTYPE ret = OMX_ErrorNone;
    OMX_U8 *buf;
    OMX_U32 buf_len;
+   OMX_U32 mult_fact = 16;
 
    if (m_vendor_config.pData) {
       buf = m_vendor_config.pData;
@@ -7011,22 +7022,26 @@ OMX_ERRORTYPE omx_vdec::omx_vdec_check_port_settings(OMX_BUFFERHEADERTYPE *
       cropdx = width;
       cropx = cropy = 0;
     }
-    if ((height % 16) != 0) {
-         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
-                  "\n Height %d is not a multiple of 16",
-                  height);
-         height = (height / 16 + 1) * 16;
+    if( m_color_format == QOMX_COLOR_FormatYVU420PackedSemiPlanar32m4ka)
+       mult_fact = 32;
+
+    if ((height % mult_fact) != 0) {
+         QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "\n Height %d is not a multiple of %d",
+                  height, mult_fact);
+         height = (height / mult_fact + 1) * mult_fact;
          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                   "\n Height adjusted to %d \n", height);
       }
-      if ((width % 16) != 0) {
-         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
-                  "\n Width %d is not a multiple of 16",
-                  width);
-         width = (width / 16 + 1) * 16;
+      if ((width % mult_fact) != 0) {
+         QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "\n Width %d is not a multiple of %d",
+                  width, mult_fact);
+         width = (width / mult_fact + 1) * mult_fact;
          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                   "\n Width adjusted to %d \n", width);
       }
+
    return OMX_ErrorNone;
 }
 
@@ -7198,6 +7213,7 @@ OMX_ERRORTYPE omx_vdec::
    m_vdec_cfg.size_of_nal_length_field = m_nalu_bytes;
    m_vdec_cfg.vc1Rowbase = 0;
    m_vdec_cfg.postProc = 0;
+   m_vdec_cfg.color_format = m_color_format;
 
    QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED, "m_vdec_cfg.kind %s\n",
             m_vdec_cfg.kind);

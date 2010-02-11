@@ -40,6 +40,12 @@ extern "C" {
       ADSP_BUFFER_TYPE_INTERNAL1,
       ADSP_BUFFER_TYPE_INTERNAL2,
    };
+
+   enum {
+      ADSP_COLOR_FORMAT_NV21 = 0x01,
+      ADSP_COLOR_FORMAT_NV21_YAMATO = 0x02,
+   };
+
    struct adsp_module;
    struct adsp_pmem_info;
    struct adsp_buffers {
@@ -78,7 +84,7 @@ extern "C" {
       unsigned int h264_nal_len_size;
       unsigned int postproc_flag;
       unsigned int fruc_enable;
-      unsigned int reserved;
+      unsigned int color_format;
       unsigned char *seq_header;
       struct adsp_buf_req *buf_req;
    };
