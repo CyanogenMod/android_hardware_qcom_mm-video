@@ -32,7 +32,6 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef T_WINNT
 #include <fcntl.h>
 #include <sys/ioctl.h>
-#include <linux/msm_adsp.h>
 #include <unistd.h>
 #include <errno.h>
 #include <pthread.h>
