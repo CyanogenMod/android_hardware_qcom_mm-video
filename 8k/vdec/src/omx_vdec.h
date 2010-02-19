@@ -684,6 +684,7 @@ class omx_vdec:public qc_omx_component, public omx_vdec_inpbuf {
    // SPS+PPS sent as part of set_config
    OMX_VENDOR_EXTRADATATYPE m_vendor_config;
    header_state m_header_state;
+   bool m_bInvalidState;
     bool                                m_b_divX_parser;
     MP4_Utils                           *m_mp4_utils;
     uint64                              m_timestamp_interval;

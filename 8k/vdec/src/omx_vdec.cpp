@@ -305,7 +305,8 @@ m_prev_timestamp(0),
 m_b_display_order(false),
 m_pPrevFrame(NULL),
 m_codec_format(0),
-m_codec_profile(0)
+m_codec_profile(0),
+m_bInvalidState(false)
 {
    /* Assumption is that , to begin with , we have all the frames with client */
    memset(m_out_flags, 0x00, (OMX_CORE_NUM_OUTPUT_BUFFERS + 7) / 8);
@@ -590,10 +591,10 @@ void omx_vdec::frame_done_cb(struct vdec_context *ctxt,
          }
       } else {
          if(frame->flags & FRAME_FATAL_ERROR) {
-             pThis->m_state = OMX_StateInvalid;
+             pThis->m_bInvalidState = true;
              pThis->m_cb.EventHandler(&pThis->m_cmp, pThis->m_app_data,
                     OMX_EventError,
-                    OMX_ErrorInvalidState, 0,
+                    OMX_ErrorHardware, 0,
                     NULL);
              return;
          }
@@ -4818,6 +4819,13 @@ OMX_ERRORTYPE omx_vdec::
       QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,_ERROR("ETB in Invalid State\n");
       return OMX_ErrorInvalidState;
       } */
+
+    if(m_bInvalidState == true)
+    {
+       buffer_done_cb_stub(&m_vdec_cfg, buffer);
+       return OMX_ErrorNone;
+    }
+
    OMX_ERRORTYPE ret = OMX_ErrorNone;
    OMX_ERRORTYPE ret1 = OMX_ErrorNone;
    OMX_U32 ret2;
@@ -4961,10 +4969,9 @@ OMX_ERRORTYPE omx_vdec::
                    bInterlace, cropx, cropy,
                    cropdx, cropdy);
       if (ret != OMX_ErrorNone) {
-         m_state = OMX_StateInvalid;
+         m_bInvalidState = true;
          m_cb.EventHandler(&m_cmp, m_app_data, OMX_EventError,
-                 OMX_ErrorInvalidState, 0, NULL);
-         execute_omx_flush(OMX_ALL);
+                 OMX_ErrorFormatNotDetected , 0, NULL);
          return ret;
       }
       m_bInterlaced = bInterlace;
@@ -4993,12 +5000,11 @@ OMX_ERRORTYPE omx_vdec::
             QTV_MSG_PRIO(QTVDIAG_GENERAL,
                     QTVDIAG_PRIO_ERROR,
                     "Native decoder creation failed\n");
-            m_state = OMX_StateInvalid;
+            m_bInvalidState = true;
             m_cb.EventHandler(&m_cmp, m_app_data,
                     OMX_EventError,
-                    OMX_ErrorInvalidState, 0,
+                    OMX_ErrorInsufficientResources, 0,
                     NULL);
-            execute_omx_flush(OMX_ALL);
             return ret;
          }
 
@@ -5103,10 +5109,9 @@ OMX_ERRORTYPE omx_vdec::
             return OMX_ErrorNone;
          }
       } else {
-         m_state = OMX_StateInvalid;
+         m_bInvalidState = true;
          m_cb.EventHandler(&m_cmp, m_app_data, OMX_EventError,
                  ret1, 0, NULL);
-         execute_omx_flush(OMX_ALL);
          return ret1;
       }
    }
@@ -5140,6 +5145,12 @@ OMX_ERRORTYPE omx_vdec::
               "empty_this_buffer_proxy_arbitrary_bytes in Invalid State\n");
       m_current_arbitrary_bytes_input = NULL;
       return OMX_ErrorInvalidState;
+   }
+   if (m_bInvalidState) {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+              "empty_this_buffer_proxy_arbitrary_bytes in Invalid State Flag true\n");
+       buffer_done_cb_stub(&m_vdec_cfg, buffer);
+       return OMX_ErrorNone;
    }
 
    if (!m_bPartialFrame) {
@@ -5494,12 +5505,11 @@ OMX_ERRORTYPE omx_vdec::
             QTV_MSG_PRIO(QTVDIAG_GENERAL,
                     QTVDIAG_PRIO_ERROR,
                     "empty_this_buffer_proxy_subframe_stitching- Bit stream Error send Eventerro\n");
-            m_state = OMX_StateInvalid;
+            m_bInvalidState = true;
             m_cb.EventHandler(&m_cmp, m_app_data,
                     OMX_EventError,
-                    OMX_ErrorInvalidState, 0,
+                    OMX_ErrorStreamCorrupt, 0,
                     NULL);
-            execute_omx_flush(OMX_ALL);
             return OMX_ErrorStreamCorrupt;
 
          }
@@ -5794,10 +5804,9 @@ OMX_ERRORTYPE omx_vdec::
    if (false == is_frame_no_error) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "Subframe stitching - Bit stream Error send Eventerro\n");
-      m_state = OMX_StateInvalid;
+      m_bInvalidState = true;
       m_cb.EventHandler(&m_cmp, m_app_data, OMX_EventError,
-              OMX_ErrorInvalidState, 0, NULL);
-      execute_omx_flush(OMX_ALL);
+              OMX_ErrorStreamCorrupt, 0, NULL);
       return OMX_ErrorStreamCorrupt;
    }
 
@@ -6186,6 +6195,12 @@ OMX_ERRORTYPE omx_vdec::fill_this_buffer_proxy(OMX_IN OMX_HANDLETYPE hComp,
    unsigned push_cnt = 0;
    QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
             "FTB Outstanding frame cnt %d\n", m_outstanding_frames);
+
+    if(m_bInvalidState == true)
+    {
+       m_cb.FillBufferDone(&m_cmp, m_app_data, buffer);
+       return OMX_ErrorNone;
+    }
 
    if (omx_vdec_get_use_buf_flg()) {
       // Get the PMEM buf
@@ -7449,10 +7464,9 @@ OMX_ERRORTYPE omx_vdec::
    QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED, "vdec_open[%p]\n",
             m_vdec);
    if (!m_vdec) {
-      m_state = OMX_StateInvalid;
+      m_bInvalidState = true;
       m_cb.EventHandler(&m_cmp, m_app_data, OMX_EventError,
-              OMX_ErrorInvalidState, 0, NULL);
-      execute_omx_flush(OMX_ALL);
+              OMX_ErrorInsufficientResources, 0, NULL);
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "ERROR!!! vdec_open failed\n");
       if (m_vdec_cfg.sequenceHeader) {
