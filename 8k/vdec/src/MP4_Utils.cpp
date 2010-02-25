@@ -629,6 +629,112 @@ bool MP4_Utils::parseHeader(mp4StreamType * psBits) {
    return validate_profile_and_level(profile_and_level_indication);
 }
 
+/*===========================================================================
+
+FUNCTION:
+  parseSparkHeader
+
+DESCRIPTION:
+  This function decodes the Spark header and populates the frame width and
+  frame height info in the MP4_Utils members.
+
+INPUT/OUTPUT PARAMETERS:
+  psBits - pointer to input stream of bits
+
+RETURN VALUE:
+  Error code
+
+SIDE EFFECTS:
+  None.
+
+===========================================================================*/
+bool MP4_Utils::parseSparkHeader(mp4StreamType * psBits)
+{
+    m_posInfo.bitPos = 0;
+    m_posInfo.bytePtr = psBits->data;
+    m_dataBeginPtr = psBits->data;
+
+    if (psBits->numBytes < 30)
+    {
+        printf("SPARK header length less than 30\n");
+        return false;
+    }
+    // try to find SPARK format 0 start code which is the same as h263 start code
+
+    m_posInfo.bytePtr = find_code(m_posInfo.bytePtr,
+                                  psBits->numBytes,
+                                  SHORT_HEADER_MASK,
+                                  SHORT_HEADER_START_CODE);
+
+    if ( m_posInfo.bytePtr == NULL )
+    {
+         m_posInfo.bitPos = 0;
+         m_posInfo.bytePtr = psBits->data;
+        //Could not find SPARK format 0 start code
+        //Now, try to find SPARK format 1 start code
+        m_posInfo.bytePtr = find_code(m_posInfo.bytePtr,
+                                      psBits->numBytes,
+                                      SHORT_HEADER_MASK,
+                                      SPARK1_START_CODE);
+    }
+
+    if (m_posInfo.bytePtr == NULL)
+    {
+        printf("Could not find SPARK format 0 or format 1 headers\n");
+        return false;
+    }
+    m_posInfo.bitPos = 0;
+    m_posInfo.bytePtr = psBits->data;
+
+    // skip 22 bits of the start code
+    read_bit_field(&m_posInfo, 22);
+
+    // skip 8 bits of Temporal reference field
+    read_bit_field(&m_posInfo, 8);
+
+    // read the source format
+    uint32 sourceFormat = 0;
+    sourceFormat = read_bit_field(&m_posInfo, 3);
+
+    switch (sourceFormat)
+    {
+    case 0:
+        m_SrcWidth = read_bit_field(&m_posInfo, 8);
+        m_SrcHeight = read_bit_field(&m_posInfo, 8);
+        break;
+    case 1:
+        m_SrcWidth = read_bit_field(&m_posInfo, 16);
+        m_SrcHeight = read_bit_field(&m_posInfo, 16);
+        break;
+      case 2:           // CIF
+          m_SrcWidth = 352;
+        m_SrcHeight = 288;
+        break;
+    case 3:       // QCIF
+        m_SrcWidth = 176;
+        m_SrcHeight = 144;
+        break;
+    case 4:       // SQCIF
+        m_SrcWidth = 128;
+        m_SrcHeight = 96;
+        break;
+    case 5:       // QVGA
+        m_SrcWidth = 320;
+        m_SrcHeight = 240;
+        break;
+    case 6:
+        m_SrcWidth = 160;
+        m_SrcHeight = 120;
+        break;
+    default:
+        return false;
+    }
+
+    return true;
+}
+
+/* <EJECT> */
+
 /*
 =============================================================================
 FUNCTION:

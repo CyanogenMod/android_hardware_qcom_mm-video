@@ -134,6 +134,7 @@ typedef unsigned char byte;   /* Unsigned 8  bit value type. */
 #define VOP_START_CODE                      0x000001B6
 #define SHORT_HEADER_MASK                   0xFFFFFC00
 #define SHORT_HEADER_START_CODE             0x00008000
+#define SPARK1_START_CODE                   0x00008400
 #define MPEG4_SHAPE_RECTANGULAR               0x00
 #define EXTENDED_PAR                        0xF
 #define SHORT_VIDEO_START_MARKER         0x20
@@ -257,6 +258,29 @@ SIDE EFFECTS:
 
 ===========================================================================*/
    bool parseHeader(mp4StreamType * psBits);
+
+/* <EJECT> */
+
+/*===========================================================================
+
+FUNCTION:
+  parseSparkHeader
+
+DESCRIPTION:
+  This function decodes the Spark header and populates the frame width and
+  frame height info in the MP4_Utils members.
+
+INPUT/OUTPUT PARAMETERS:
+  psBits - pointer to input stream of bits
+
+RETURN VALUE:
+  Error code
+
+SIDE EFFECTS:
+  None.
+
+===========================================================================*/
+   bool parseSparkHeader(mp4StreamType * psBits);
 
 /* <EJECT> */
 /*===========================================================================

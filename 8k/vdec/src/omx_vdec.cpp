@@ -1192,6 +1192,13 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
       strncpy((char *)m_cRole, "video_decoder.vp",
          OMX_MAX_STRINGNAME_SIZE);
       m_vdec_cfg.fourcc = MAKEFOURCC('V', 'P', '6', '0');
+   } else
+       if (!strncmp
+           (m_vdec_cfg.kind, "OMX.qcom.video.decoder.spark",
+            OMX_MAX_STRINGNAME_SIZE)) {
+           strncpy((char *)m_cRole, "video_decoder.spark",
+            OMX_MAX_STRINGNAME_SIZE);
+           m_vdec_cfg.fourcc = MAKEFOURCC('F', 'L', 'V', '1');
    } else {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "\n Unknown Component\n");
@@ -1210,9 +1217,10 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
       m_mp4_utils = new MP4_Utils();
       m_b_display_order = true;
       m_codec_format = QOMX_VIDEO_DIVXFormat4;
-   } else if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.h263", 27) ==
-              0 || (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.mpeg4", 28) ==
-              0)) {
+   } else if ( (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.h263", 27) == 0 )
+              || (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.spark", 28) == 0)
+              || (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.mpeg4", 28) == 0)
+               ) {
       m_out_buf_count = OMX_CORE_NUM_OUTPUT_BUFFERS_MP4;
       m_outstanding_frames = -OMX_CORE_NUM_OUTPUT_BUFFERS_MP4;
       m_mp4_utils = new MP4_Utils();
@@ -2366,7 +2374,16 @@ OMX_ERRORTYPE omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE hComp,
                       OMX_COLOR_FormatUnused;
                   portFmt->eCompressionFormat =
                       (OMX_VIDEO_CODINGTYPE)QOMX_VIDEO_CodingVp;
-              }
+              } else
+                    if (!strncmp
+                   (m_vdec_cfg.kind,
+                    "OMX.qcom.video.decoder.spark",
+                    OMX_MAX_STRINGNAME_SIZE)) {
+                   portFmt->eColorFormat =
+                       OMX_COLOR_FormatUnused;
+                   portFmt->eCompressionFormat =
+                       (OMX_VIDEO_CODINGTYPE)QOMX_VIDEO_CodingSpark;
+                }
 
             } else {
                QTV_MSG_PRIO(QTVDIAG_GENERAL,
@@ -2612,6 +2629,22 @@ OMX_ERRORTYPE omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE hComp,
 
                 }
             }
+            else if((!strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.spark",OMX_MAX_STRINGNAME_SIZE)))
+             {
+                if (profileLevelType->nProfileIndex == 0)
+                {
+                   profileLevelType->eProfile = OMX_VIDEO_H263ProfileBaseline;
+                   profileLevelType->eLevel   = OMX_VIDEO_H263Level60;
+                }
+                else
+                {
+                   QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "get_parameter: OMX_IndexParamVideoProfileLevelQuerySupported nProfileIndex ret NoMore %d\n",
+                  profileLevelType->nProfileIndex);
+                   eRet = OMX_ErrorNoMore;
+
+                }
+             }
 
           }
           else
@@ -3021,7 +3054,25 @@ OMX_ERRORTYPE omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE hComp,
                         comp_role->cRole);
                eRet = OMX_ErrorUnsupportedSetting;
             }
-         } else {
+         } else
+             if (!strncmp
+                (m_vdec_cfg.kind, "OMX.qcom.video.decoder.spark",
+                 OMX_MAX_STRINGNAME_SIZE)) {
+                if (!strncmp
+                    ((const char *)comp_role->cRole,
+                     "video_decoder.spark",
+                     OMX_MAX_STRINGNAME_SIZE)) {
+                   strncpy((char *)m_cRole,
+                      "video_decoder.spark",
+                      OMX_MAX_STRINGNAME_SIZE);
+                } else {
+                   QTV_MSG_PRIO1(QTVDIAG_GENERAL,
+                            QTVDIAG_PRIO_ERROR,
+                            "Setparameter: unknown Index %s\n",
+                            comp_role->cRole);
+                   eRet = OMX_ErrorUnsupportedSetting;
+                }
+          } else {
             QTV_MSG_PRIO1(QTVDIAG_GENERAL,
                      QTVDIAG_PRIO_ERROR,
                      "Setparameter: unknown param %s\n",
@@ -3124,6 +3175,33 @@ OMX_ERRORTYPE omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE hComp,
               QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
                   "set_parameter: OMX_QcomIndexParamVideoVp BAD PORT INDEX%d \n",
                   vpType->nPortIndex);
+              eRet = OMX_ErrorBadPortIndex;
+          }
+        break;
+      }
+   case OMX_QcomIndexParamVideoSpark:
+      {
+          QOMX_VIDEO_PARAM_SPARKTYPE *sparkType =
+             (QOMX_VIDEO_PARAM_SPARKTYPE *) paramData;
+
+          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "set_parameter: OMX_QcomIndexParamVideoSpark %d\n",
+                  paramIndex);
+
+          if(sparkType->nPortIndex == 0) {
+
+              m_codec_format = sparkType->eFormat;
+
+              QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "set_parameter: OMX_QcomIndexParamVideoSpark Format %d\n",
+                  m_codec_format);
+          }
+          else {
+
+              QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+                  "set_parameter: OMX_QcomIndexParamVideoSpark BAD PORT INDEX%d \n",
+                  sparkType->nPortIndex);
+
               eRet = OMX_ErrorBadPortIndex;
           }
         break;
@@ -5305,6 +5383,21 @@ OMX_ERRORTYPE omx_vdec::
             m_bStartCode = true;
          }else
              if (strncmp
+            (m_vdec_cfg.kind, "OMX.qcom.video.decoder.spark",
+             28) == 0) {
+                 if (m_codec_format == QOMX_VIDEO_SparkFormat1) {
+                     m_arbitrary_bytes_info.start_code.m_start_code =
+                         SPARK1_START_CODE;
+                 }
+                 else {
+                    m_arbitrary_bytes_info.start_code.m_start_code =
+                        SHORT_HEADER_START_CODE;
+                 }
+                 m_arbitrary_bytes_info.start_code.
+                     m_start_code_mask = SHORT_HEADER_MASK;
+                 m_bStartCode = true;
+         }else
+             if (strncmp
             (m_vdec_cfg.kind, "OMX.qcom.video.decoder.h263",
              27) == 0) {
             m_arbitrary_bytes_info.start_code.m_start_code =
@@ -6701,7 +6794,21 @@ OMX_ERRORTYPE omx_vdec::component_role_enum(OMX_IN OMX_HANDLETYPE hComp,
                  "\n No more roles \n");
          eRet = OMX_ErrorNoMore;
       }
-   } else {
+   } else
+       if (!strncmp
+      (m_vdec_cfg.kind, "OMX.qcom.video.decoder.spark",
+       OMX_MAX_STRINGNAME_SIZE)) {
+      if ((0 == index) && role) {
+         strncpy((char *)role, "video_decoder.spark",
+            OMX_MAX_STRINGNAME_SIZE);
+         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "component_role_enum: role %s\n", role);
+      } else {
+         QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                 "\n No more roles \n");
+         eRet = OMX_ErrorNoMore;
+      }
+    } else {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "\n Querying Role on Unknown Component\n");
       eRet = OMX_ErrorInvalidComponentName;
@@ -7060,6 +7167,23 @@ OMX_ERRORTYPE omx_vdec::omx_vdec_check_port_settings(OMX_BUFFERHEADERTYPE *
       bInterlace = false;
       QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                "MPEG4/H263 ht[%d] wdth[%d]\n", height, width);
+   } else if (!strcmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.spark")) {
+       mp4StreamType dataStream;
+       dataStream.data = (unsigned char *)buf;
+       dataStream.numBytes = (unsigned long int)buf_len;
+        QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+                 "Parsing Spark bit stream\n");
+       if (false == m_mp4_utils->parseSparkHeader(&dataStream)) {
+          QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+                  "Parsing Error unsupported profile or level\n");
+          return OMX_ErrorStreamCorrupt;
+       }
+       cropx = cropy = 0;
+       cropdy = height = m_mp4_utils->SrcHeight();
+       cropdx = width = m_mp4_utils->SrcWidth();
+       bInterlace = false;
+       QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                "SPARK ht[%d] wdth[%d]\n", height, width);
    } else if (!strcmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.divx") &&
               m_codec_format == QOMX_VIDEO_DIVXFormat311) {
       bInterlace = false;
@@ -7390,6 +7514,14 @@ OMX_ERRORTYPE omx_vdec::
          memmove(buffer->pBuffer,
             &buffer->pBuffer[m_vdec_cfg.sequenceHeaderLen],
             buffer->nFilledLen);
+      } else
+          if (strncmp
+         (m_vdec_cfg.kind, "OMX.qcom.video.decoder.spark",
+          28) == 0) {
+         QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                 "SPARK clip \n");
+         m_vdec_cfg.sequenceHeaderLen = 0;
+         m_vdec_cfg.sequenceHeader = NULL;
       } else
           if (strncmp
          (m_vdec_cfg.kind, "OMX.qcom.video.decoder.h263",

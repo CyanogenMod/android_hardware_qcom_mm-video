@@ -66,6 +66,7 @@ extern "C" {
 #define true 1
 #define VOP_START_CODE 0x000001B6
 #define SHORT_HEADER_START_CODE 0x00008000
+#define SPARK1_START_CODE 0x00008400
 #define VC1_START_CODE  0x00000100
 #define NUMBER_OF_ARBITRARYBYTES_READ  (4 * 1024)
 #define VC1_SEQ_LAYER_SIZE_WITHOUT_STRUCTC 32
@@ -96,7 +97,9 @@ typedef enum {
   CODEC_FORMAT_VC1,
   CODEC_FORMAT_DIVX,
   CODEC_FORMAT_VP,
-  CODEC_FORMAT_MAX = CODEC_FORMAT_VP
+  CODEC_FORMAT_SPARK0,
+  CODEC_FORMAT_SPARK1,
+  CODEC_FORMAT_MAX = CODEC_FORMAT_SPARK1
 } codec_format;
 
 typedef enum {
@@ -119,9 +122,7 @@ typedef enum {
   FILE_TYPE_DIVX_311,
 
   FILE_TYPE_START_OF_VP_SPECIFIC = 50,
-  FILE_TYPE_VP_6 = FILE_TYPE_START_OF_VP_SPECIFIC
-
-
+  FILE_TYPE_VP_6 = FILE_TYPE_START_OF_VP_SPECIFIC,
 } file_type;
 
 typedef enum {
@@ -561,6 +562,8 @@ int main(int argc, char **argv)
       printf(" 4--> VC1\n");
       printf(" 5--> DIVX\n");
       printf(" 6--> VP6\n");
+      printf(" 7--> Spark0\n");
+      printf(" 8--> Spark1\n");
       fflush(stdin);
       scanf("%d", &codec_format_option);
       fflush(stdin);
@@ -599,6 +602,10 @@ int main(int argc, char **argv)
       {
         printf(" 3--> VP6 raw bit stream (.vp)\n");
       }
+      else if (codec_format_option == CODEC_FORMAT_SPARK0 || codec_format_option == CODEC_FORMAT_SPARK1)
+      {
+        printf(" 3--> SPARK start code based clip\n");
+      }
       fflush(stdin);
       scanf("%d", &file_type_option);
       fflush(stdin);
@@ -613,6 +620,8 @@ int main(int argc, char **argv)
           break;
         case CODEC_FORMAT_MP4:
         case CODEC_FORMAT_H263:
+        case CODEC_FORMAT_SPARK0:
+        case CODEC_FORMAT_SPARK1:
           file_type_option = (file_type)(FILE_TYPE_START_OF_MP4_SPECIFIC + file_type_option - FILE_TYPE_COMMON_CODEC_MAX);
           break;
         case CODEC_FORMAT_VC1:
@@ -885,6 +894,8 @@ int run_tests()
   }
   else if((codec_format_option == CODEC_FORMAT_H263) ||
           (codec_format_option == CODEC_FORMAT_MP4)  ||
+          (codec_format_option == CODEC_FORMAT_SPARK0)  ||
+          (codec_format_option == CODEC_FORMAT_SPARK1)  ||
           (file_type_option == FILE_TYPE_DIVX_4_5_6)) {
     Read_Buffer = Read_Buffer_From_Vop_Start_Code_File;
   }
@@ -1084,6 +1095,10 @@ int Init_Decoder()
     {
       strncpy(vdecCompNames, "OMX.qcom.video.decoder.h263", 28);
     }
+    else if (codec_format_option == CODEC_FORMAT_SPARK0 || codec_format_option == CODEC_FORMAT_SPARK1)
+    {
+      strncpy(vdecCompNames, "OMX.qcom.video.decoder.spark", 29);
+    }
     else if (codec_format_option == CODEC_FORMAT_VC1)
     {
       strncpy(vdecCompNames, "OMX.qcom.video.decoder.vc1", 27);
@@ -1157,6 +1172,11 @@ int Init_Decoder()
     else if (codec_format_option == CODEC_FORMAT_H263)
     {
       portFmt.format.video.eCompressionFormat = OMX_VIDEO_CodingH263;
+    }
+    else if (codec_format_option == CODEC_FORMAT_SPARK0 || codec_format_option == CODEC_FORMAT_SPARK1)
+    {
+      //portFmt.format.video.eCompressionFormat = OMX_VIDEO_CodingSpark;
+      portFmt.format.video.eCompressionFormat = (OMX_VIDEO_CODINGTYPE)QOMX_VIDEO_CodingSpark;
     }
     else if (codec_format_option == CODEC_FORMAT_VC1)
     {
@@ -1302,6 +1322,21 @@ int Play_Decoder()
         paramVp.eProfile = QOMX_VIDEO_VPProfileAdvanced;
         OMX_SetParameter(dec_handle,(OMX_INDEXTYPE)OMX_QcomIndexParamVideoVp,
                      (OMX_PTR)&paramVp);
+    } else
+        if(codec_format_option == CODEC_FORMAT_SPARK0 || codec_format_option == CODEC_FORMAT_SPARK1) {
+        QOMX_VIDEO_PARAM_SPARKTYPE paramSpark;
+        CONFIG_VERSION_SIZE(paramSpark);
+        paramSpark.nPortIndex = 0;
+        if( codec_format_option == CODEC_FORMAT_SPARK1 ) {
+
+            paramSpark.eFormat = QOMX_VIDEO_SparkFormat1;
+        }
+        else if (codec_format_option == CODEC_FORMAT_SPARK0 ) {
+
+            paramSpark.eFormat = QOMX_VIDEO_SparkFormat0;
+        }
+        OMX_SetParameter(dec_handle,(OMX_INDEXTYPE)OMX_QcomIndexParamVideoSpark,
+                     (OMX_PTR)&paramSpark);
     }
 
 
@@ -1836,6 +1871,10 @@ static int Read_Buffer_From_Vop_Start_Code_File(OMX_BUFFERHEADERTYPE  *pBufHdr)
           {
             header_code = SHORT_HEADER_START_CODE;
           }
+          else if ( (0xFFFFFC00 & code) == SPARK1_START_CODE )
+          {
+            header_code = SPARK1_START_CODE;
+          }
         }
         if ((header_code == VOP_START_CODE) && (code == VOP_START_CODE))
         {
@@ -1845,7 +1884,8 @@ static int Read_Buffer_From_Vop_Start_Code_File(OMX_BUFFERHEADERTYPE  *pBufHdr)
           break;
 
         }
-        else if (( header_code == SHORT_HEADER_START_CODE ) && ( SHORT_HEADER_START_CODE == (code & 0xFFFFFC00)))
+        else if ( (( header_code == SHORT_HEADER_START_CODE ) && ( SHORT_HEADER_START_CODE == (code & 0xFFFFFC00))) ||
+                  (( header_code == SPARK1_START_CODE ) && ( SPARK1_START_CODE == (code & 0xFFFFFC00))) )
         {
           //Seek backwards by 4
           fseek(inputBufferFile, -4, SEEK_CUR);
