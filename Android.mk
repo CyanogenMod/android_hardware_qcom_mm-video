@@ -31,5 +31,6 @@ include $(CLEAR_VARS)
 
 ifeq ($(TARGET_BOARD_PLATFORM), qsd8k)
     include $(OMX_VIDEO_PATH)/8k/vdec/Android.mk
+    include $(OMX_VIDEO_PATH)/8k/venc/Android.mk
 endif
 
