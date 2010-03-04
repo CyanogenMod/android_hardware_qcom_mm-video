@@ -445,7 +445,7 @@ class Venc : public qc_omx_component
     OMX_ERRORTYPE allocate_q6_buffers(struct venc_buffers *);
     OMX_ERRORTYPE free_q6_buffers(struct venc_buffers *);
 
-    OMX_ERRORTYPE pmem_alloc(struct venc_pmem *ptr, int size);
+    OMX_ERRORTYPE pmem_alloc(struct venc_pmem *ptr, int size, int pmem_region_id);
     OMX_ERRORTYPE pmem_free(struct venc_pmem *);
   private:
 

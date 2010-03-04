@@ -15,6 +15,7 @@ libmm-venc-def += -O3
 libmm-venc-def += -D_ANDROID_LOG_
 libmm-venc-def += -D_ANDROID_LOG_ERROR
 libmm-venc-def += -D_ANDROID_LOG_PROFILE
+libmm-venc-def += -Du32="unsigned int"
 
 # ---------------------------------------------------------------------------------
 # 			Make the Shared library (libOmxVidEnc)
