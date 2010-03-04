@@ -3620,6 +3620,8 @@ OMX_ERRORTYPE Venc::free_buffer(OMX_IN  OMX_HANDLETYPE hComponent,
       if (result != OMX_ErrorNone) {
         QC_OMX_MSG_ERROR("failed to free buffer");
       }
+      free(pBufferHdr->pPlatformPrivate);
+      pBufferHdr->pPlatformPrivate = NULL;
     }
     else {
       QC_OMX_MSG_HIGH("No need to free output buffer allocated by clients");
@@ -3648,6 +3650,8 @@ OMX_ERRORTYPE Venc::free_buffer(OMX_IN  OMX_HANDLETYPE hComponent,
       if (result != OMX_ErrorNone) {
         QC_OMX_MSG_ERROR("failed to free buffer");
       }
+      free(pBufferHdr->pPlatformPrivate);
+      pBufferHdr->pPlatformPrivate = NULL;
     }
     else {
       QC_OMX_MSG_HIGH("No need to free input buffer allocated by clients");
