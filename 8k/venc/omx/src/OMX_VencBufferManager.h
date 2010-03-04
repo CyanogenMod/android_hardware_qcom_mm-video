@@ -91,7 +91,7 @@ class VencBufferManager
     int m_nBuffers;
 
     // max buffer number assumption
-    static const int MAX_FREE_BUFFERS = 10;
+    static const int MAX_FREE_BUFFERS = 50;
 
     /// free node pool
     Node m_sFreeNodePool[MAX_FREE_BUFFERS];

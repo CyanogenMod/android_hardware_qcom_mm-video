@@ -58,7 +58,7 @@ class VencMsgQ
 {
   public:
     /// max size for component thread message queue
-    static const int MAX_MSG_QUEUE_SIZE = 10;
+    static const int MAX_MSG_QUEUE_SIZE = 50;
 
     /// Ids for thread messages
     enum MsgIdType
