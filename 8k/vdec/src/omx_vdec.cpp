@@ -5007,8 +5007,8 @@ OMX_ERRORTYPE omx_vdec::
    QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW,
             "empty_this_buffer_frame_based buffer->nTimeStamp %d nFlags %d\n",
             buffer->nTimeStamp, buffer->nFlags);
-   unsigned height = 0;
-   unsigned width = 0;
+   unsigned height = 0,val_height = 0;
+   unsigned width = 0, val_width = 0;
    bool bInterlace = false;
    unsigned cropx = 0, cropy = 0, cropdx = 0, cropdy = 0;
 
@@ -5186,10 +5186,20 @@ OMX_ERRORTYPE omx_vdec::
       QTV_MSG_PRIO4(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                "ETB::after parsing-->Height[%d] Width[%d] m_ht[%d] m_wdth[%d]\n",
                height, width, m_height, m_width);
+      if (m_color_format == QOMX_COLOR_FormatYVU420PackedSemiPlanar32m4ka)
+      {
+        val_height =  (m_crop_dy + 15) & ~15;
+        val_width = (m_crop_dx + 15) & ~15;
+      }
+      else
+      {
+       val_height = height;
+       val_width = width;
+      }
 
       if ((ret1 =
-           omx_vdec_validate_port_param(height,
-                    width)) == OMX_ErrorNone) {
+           omx_vdec_validate_port_param(val_height,
+                    val_width)) == OMX_ErrorNone) {
          m_port_height = height;
          m_port_width = width;
          // Create native decoder to figure out the output buffer count and size.
