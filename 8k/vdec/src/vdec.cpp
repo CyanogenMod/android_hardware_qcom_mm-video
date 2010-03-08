@@ -46,10 +46,12 @@ extern "C" {
 #include "vdec.h"
 #ifdef T_WINNT
 #define LOG_YUV_FRAMES 1
+#define LOG_INPUT_BUFFERS 1
 #else
 #define LOG_YUV_FRAMES 0
-#endif
 #define LOG_INPUT_BUFFERS 0
+#endif
+
 #define DEBUG_ON 0
 #define Q6_VDEC_PAGE_SIZE  0x1000
 #define Q6_VDEC_PAGE_MASK  (~(Q6_VDEC_PAGE_SIZE-1))
@@ -72,12 +74,13 @@ struct Vdec_pthread_info {
 QPERF_INIT(arm_decode);
 
 #if LOG_YUV_FRAMES
-FILE *pYUVFile;
-#endif
+FILE *pYUVFile=NULL;
+#endif /* LOG_YUV_FRAMES */
+
 #if LOG_INPUT_BUFFERS
-FILE *pInputFile;
+FILE *pInputFile=NULL;
 static int counter = 0;
-#endif
+#endif /* LOG_INPUT_BUFFERS */
 
 int timestamp = 0;
 
@@ -285,6 +288,7 @@ Vdec_ReturnType vdec_close(struct VDecoder *dec)
 #if LOG_INPUT_BUFFERS
    if (pInputFile) {
       fclose(pInputFile);
+      pInputFile=NULL;
    }
 #endif
    adsp_close((struct adsp_module *)dec->adsp_module);
@@ -848,15 +852,32 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
 
 #if LOG_YUV_FRAMES
 #ifdef T_WINNT
-   pYUVFile = fopen("../../debug/yuvframes.yuv", "wb");
+   pYUVFile = fopen("../debug/yuvframes.yuv", "wb");
+#elif _ANDROID_
+   pYUVFile = fopen("/data/yuvframes.yuv", "wb");
 #else
    pYUVFile = fopen("yuvframes.yuv", "wb");
 #endif
-#endif
+   if(!pYUVFile) {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+          "vdec: error: Unable to open file to log YUV frames.");
+   }
+#endif /* LOG_YUV_FRAMES */
 
 #if LOG_INPUT_BUFFERS
+#ifdef T_WINNT
+   pInputFile = fopen("../debug/inputbuffers.264", "wb");
+#elif _ANDROID_
+   pInputFile = fopen("/data/inputbuffers.264", "wb");
+#else
    pInputFile = fopen("inputbuffers.264", "wb");
 #endif
+   if(!pInputFile) {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+          "vdec: error: Unable to open file to log Input buffers.");
+   }
+
+#endif /* LOG_INPUT_BUFFERS */
 
    return dec;
 
@@ -965,9 +986,12 @@ Vdec_ReturnType vdec_post_input_buffer(struct VDecoder * dec,
       return VDEC_EOUTOFBUFFERS;
    }
 #if LOG_INPUT_BUFFERS
-   fwritex((uint8 *) frame->data, frame->len, pInputFile);
-   QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
-            "vdec: frame %d frame->len %d\n", counter++, frame->len);
+   if(pInputFile) {
+      fwritex((uint8 *) frame->data, frame->len, pInputFile);
+      QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
+               "vdec: input buffer %d len %d\n", counter++, frame->len);
+   }
+
 #endif
 
    QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
