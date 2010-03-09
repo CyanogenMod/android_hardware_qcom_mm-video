@@ -6021,7 +6021,13 @@ OMX_ERRORTYPE omx_vdec::
    if (OMX_TRUE == isNewFrame) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
               "add_entry_subframe_stitching - NEW Frame\n");
-      if (m_pcurrent_frame != NULL) {
+      if (m_pcurrent_frame != NULL || buffer->nFlags & OMX_BUFFERFLAG_EOS)  {
+         if(m_pcurrent_frame == NULL)
+          {
+            m_pcurrent_frame = buffer;
+            nBufferIndex = m_pcurrent_frame - ((OMX_BUFFERHEADERTYPE *) m_inp_mem_ptr);
+          }
+          m_pcurrent_frame->nFlags |= buffer->nFlags;
          QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
                  "add_entry_subframe_stitching - add entry previous buffer\n");
          add_entry(nBufferIndex);
