@@ -19,6 +19,7 @@ CPPFLAGS += -I$(LOCAL_DIR)/common/inc
 CPPFLAGS += -I$(LOCAL_DIR)/device/inc
 CPPFLAGS += -I$(LOCAL_DIR)/omx/inc
 CPPFLAGS += -I$(LOCAL_DIR)/test/common/inc
+CPPFLAGS += -Du32="unsigned int"
 
 #-----------------------------------------------------------------------------
 #             Make the Shared library
