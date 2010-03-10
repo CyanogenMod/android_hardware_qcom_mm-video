@@ -805,7 +805,7 @@ OMX_ERRORTYPE Venc::get_parameter(OMX_IN  OMX_HANDLETYPE hComponent,
           sequence.nHdrLen = 0;
 
           if (sequence.nBufSize > 0 ) {
-            pmem_alloc(&sbuf, pParam->nBuffLen);
+            pmem_alloc(&sbuf, pParam->nBuffLen, VENC_PMEM_EBI1);
             if (!ven_get_sequence_hdr(m_pDevice, &sbuf, &nOutSize))
             {
               pParam->nFilledLen = (OMX_U32) sequence.nBufSize;
@@ -3461,7 +3461,7 @@ OMX_ERRORTYPE Venc::allocate_buffer(OMX_IN OMX_HANDLETYPE hComponent,
       {
 
         result = pmem_alloc(&pPrivateData->sPmemInfo,
-            m_sOutPortDef.nBufferSize);
+            m_sOutPortDef.nBufferSize, VENC_PMEM_EBI1);
         if (result != OMX_ErrorNone) {
           QC_OMX_MSG_ERROR("Failed to allocate pmem buffer");
         }
@@ -3537,7 +3537,7 @@ OMX_ERRORTYPE Venc::allocate_buffer(OMX_IN OMX_HANDLETYPE hComponent,
       {
 
         result = pmem_alloc(&pPrivateData->sPmemInfo,
-            m_sInPortDef.nBufferSize);
+            m_sInPortDef.nBufferSize, VENC_PMEM_EBI1);
         if (result != OMX_ErrorNone) {
           QC_OMX_MSG_ERROR("Failed to allocate pmem buffer");
         }
@@ -3706,15 +3706,16 @@ OMX_ERRORTYPE Venc::allocate_q6_buffers(struct venc_buffers *pbufs)
   // allocate recon buffers
   for (i = 0; i < VENC_MAX_RECON_BUFFERS && result == OMX_ErrorNone; i++)
   {
-    result = pmem_alloc(&(pbufs->recon_buf[i]), nReconSize);
+    result = pmem_alloc(&(pbufs->recon_buf[i]), nReconSize, VENC_PMEM_SMI);
     if (result == OMX_ErrorNone)
     {
       QC_OMX_MSG_HIGH("allocated recon buffer: pVirt=0x%x, nPhy=0x%x, \n",
           pbufs->recon_buf[i].virt,
           pbufs->recon_buf[i].phys);
-      QC_OMX_MSG_HIGH("allocated recon buffer: fd=%d, offset=%d \n",
+      QC_OMX_MSG_HIGH("allocated recon buffer: fd=%d, offset=%d src=%d\n",
           pbufs->recon_buf[i].fd,
-          pbufs->recon_buf[i].offset);
+          pbufs->recon_buf[i].offset,
+	  pbufs->recon_buf[i].src);
     }
     else
     {
@@ -3725,15 +3726,16 @@ OMX_ERRORTYPE Venc::allocate_q6_buffers(struct venc_buffers *pbufs)
   // allocate wb buffer
   if (result == OMX_ErrorNone)
   {
-    result = pmem_alloc(&(pbufs->wb_buf), nWbSize);
+    result = pmem_alloc(&(pbufs->wb_buf), nWbSize, VENC_PMEM_SMI);
     if (result == OMX_ErrorNone)
     {
       QC_OMX_MSG_HIGH("allocated wb buffer: pVirt=0x%x, nPhy=0x%x,\n",
           pbufs->wb_buf.virt,
           pbufs->wb_buf.phys);
-      QC_OMX_MSG_HIGH("allocated wb buffer: fd=%d, offset=%d \n",
+      QC_OMX_MSG_HIGH("allocated wb buffer: fd=%d, offset=%d src=%d\n",
           pbufs->wb_buf.fd,
-          pbufs->wb_buf.offset);
+          pbufs->wb_buf.offset,
+	  pbufs->wb_buf.src);
     }
     else
     {
@@ -3744,15 +3746,16 @@ OMX_ERRORTYPE Venc::allocate_q6_buffers(struct venc_buffers *pbufs)
 
   if (result == OMX_ErrorNone)
   {
-    result = pmem_alloc(&(pbufs->cmd_buf), nCmdSize);
+    result = pmem_alloc(&(pbufs->cmd_buf), nCmdSize, VENC_PMEM_SMI);
     if (result == OMX_ErrorNone)
     {
       QC_OMX_MSG_HIGH("allocated cmd buffer: pVirt=0x%x, nPhy=0x%x,\n",
           pbufs->cmd_buf.virt,
           pbufs->cmd_buf.phys);
-      QC_OMX_MSG_HIGH("allocated cmd buffer: fd=%d, offset=%d \n",
+      QC_OMX_MSG_HIGH("allocated cmd buffer: fd=%d, offset=%d src=%d\n",
           pbufs->cmd_buf.fd,
-          pbufs->cmd_buf.offset);
+          pbufs->cmd_buf.offset,
+	  pbufs->cmd_buf.src);
     }
     else
     {
@@ -3763,15 +3766,16 @@ OMX_ERRORTYPE Venc::allocate_q6_buffers(struct venc_buffers *pbufs)
 
   if (result == OMX_ErrorNone)
   {
-    result = pmem_alloc(&(pbufs->vlc_buf), nVlcSize);
+    result = pmem_alloc(&(pbufs->vlc_buf), nCmdSize, VENC_PMEM_EBI1);
     if (result == OMX_ErrorNone)
     {
       QC_OMX_MSG_HIGH("allocated vlc buffer: pVirt=0x%x, nPhy=0x%x,\n",
           pbufs->vlc_buf.virt,
           pbufs->vlc_buf.phys);
-      QC_OMX_MSG_HIGH("allocated vlc buffer: fd=%d, offset=%d \n",
+      QC_OMX_MSG_HIGH("allocated vlc buffer: fd=%d, offset=%d src=%d\n",
           pbufs->vlc_buf.fd,
-          pbufs->vlc_buf.offset);
+          pbufs->vlc_buf.offset,
+	  pbufs->vlc_buf.src);
     }
     else
     {
@@ -4746,19 +4750,26 @@ void Venc::process_status_resume_done(unsigned long nStatus)
   }
 }
 
-OMX_ERRORTYPE Venc::pmem_alloc(struct venc_pmem *pBuf, int size)
+OMX_ERRORTYPE Venc::pmem_alloc(struct venc_pmem *pBuf, int size, int pmem_region_id)
 {
   struct pmem_region region;
 
   QC_OMX_MSG_HIGH("Opening pmem files with size 0x%x...",size);
-  pBuf->fd = open("/dev/pmem_adsp", O_RDWR);
+  if (pmem_region_id == VENC_PMEM_EBI1)
+    pBuf->fd = open("/dev/pmem_adsp", O_RDWR);
+  else if (pmem_region_id == VENC_PMEM_SMI)
+    pBuf->fd = open("/dev/pmem_smipool", O_RDWR);
+  else {
+    QC_OMX_MSG_ERROR("Pmem region id not supported \n", pmem_region_id);
+    return OMX_ErrorBadParameter;
+  }
 
   if (pBuf->fd < 0) {
-    QC_OMX_MSG_ERROR("error could not open pmem device \n");
+    QC_OMX_MSG_ERROR("error could not open pmem device %d\n", pmem_region_id);
     return OMX_ErrorInsufficientResources;
   }
 
-  pBuf->src = 0; // Buffers from EBI1
+  pBuf->src = pmem_region_id;
   pBuf->offset = 0;
   pBuf->size = (size + 4095) & (~4095);
 
