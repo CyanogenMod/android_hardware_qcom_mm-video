@@ -2031,6 +2031,9 @@ bool omx_vdec::execute_input_flush(void)
             QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                      " Flush:: current arbitrary bytes not null %x ",
                      m_current_arbitrary_bytes_input);
+            m_current_arbitrary_bytes_input->nFilledLen =
+                                     m_current_arbitrary_bytes_input->nOffset;
+            m_current_arbitrary_bytes_input->nOffset = 0;
             index = get_free_extra_buffer_index();
             if (index != -1) {
                QTV_MSG_PRIO1(QTVDIAG_GENERAL,
@@ -2074,6 +2077,11 @@ bool omx_vdec::execute_input_flush(void)
                input[i]->nOffset = 0;
                input[i]->nFilledLen = 0;
                input[i]->nFlags = 0;
+               if (m_extra_buf_info[i].arbitrarybytesInput) {
+                 m_extra_buf_info[i].arbitrarybytesInput->nFilledLen =
+                         m_extra_buf_info[i].arbitrarybytesInput->nOffset;
+                 m_extra_buf_info[i].arbitrarybytesInput->nOffset = 0;
+               }
                remove_top_entry();
                QTV_MSG_PRIO1(QTVDIAG_GENERAL,
                         QTVDIAG_PRIO_MED,
