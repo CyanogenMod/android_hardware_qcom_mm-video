@@ -61,6 +61,7 @@ static void vdec_reuse_input_cb_handler(void *vdec_context, void *buffer_id);
 
 #define VDEC_INPUT_BUFFER_SIZE  450 * 1024
 #define VDEC_NUM_INPUT_BUFFERS  8
+#define VDEC_MAX_SEQ_HEADER_SIZE 300
 
 struct Vdec_pthread_info {
    pthread_mutex_t in_buf_lock;
@@ -747,6 +748,8 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
 
    init.seq_header = dec->ctxt->sequenceHeader;
    init.seq_len = dec->ctxt->sequenceHeaderLen;
+   if(init.seq_len > VDEC_MAX_SEQ_HEADER_SIZE)
+     init.seq_len = VDEC_MAX_SEQ_HEADER_SIZE;
    init.width = dec->ctxt->width;
 
    init.height = dec->ctxt->height;
