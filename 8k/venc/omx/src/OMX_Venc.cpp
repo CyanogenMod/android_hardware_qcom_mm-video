@@ -1514,6 +1514,7 @@ OMX_ERRORTYPE Venc::driver_set_default_config()
   ////////////////////////////////////////
   // set intra refresh
   ////////////////////////////////////////
+#if 0
   if (result == OMX_ErrorNone)
   {
     struct ven_intra_refresh ir;
@@ -1535,6 +1536,7 @@ OMX_ERRORTYPE Venc::driver_set_default_config()
       result = translate_driver_error(GetLastError());
     }
   }
+#endif
 
   return result;
 }
