@@ -165,12 +165,14 @@ Venc::Venc() :
   memset(&m_pPrivateInPortData, 0, sizeof(m_pPrivateInPortData));
   memset(&m_pPrivateOutPortData, 0, sizeof(m_pPrivateOutPortData));
   memset(&m_sErrorCorrection, 0, sizeof(m_sErrorCorrection));
+  sem_init(&m_cmd_lock,0,0);
 }
 
 Venc::~Venc()
 {
   g_pVencInstance = NULL;
   QC_OMX_MSG_HIGH("deconstructor (closing driver)");
+  sem_destroy(&m_cmd_lock);
   ven_device_close(m_pDevice);
 }
 
@@ -670,7 +672,7 @@ OMX_ERRORTYPE Venc::send_command(OMX_IN  OMX_HANDLETYPE hComponent,
   }
 
   m_pMsgQ->PushMsg(msgId, &msgData);
-
+  sem_wait(&m_cmd_lock);
   return OMX_ErrorNone;
 }
 
@@ -4332,9 +4334,10 @@ void Venc::process_state_change(OMX_STATETYPE eState)
             OMX_EventError,
             OMX_ErrorIncorrectStateTransition,
             0 , NULL);
-        return;
+        break;
       }
   }
+  sem_post(&m_cmd_lock);
 #undef GOTO_STATE
 }
 

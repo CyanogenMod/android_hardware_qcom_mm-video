@@ -40,6 +40,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "venc_device.h"
 #include <pthread.h>
 #include <linux/msm_q6venc.h>
+#include <semaphore.h>
 
 /*----------------------------------------------------------------------------
  * Preprocessor Definitions and Constants
@@ -512,6 +513,7 @@ class Venc : public qc_omx_component
 
     OMX_U32 m_nInBuffAllocated;
     OMX_U32 m_nOutBuffAllocated;
+    sem_t   m_cmd_lock;
 
 };
 
