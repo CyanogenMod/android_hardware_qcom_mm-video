@@ -4426,6 +4426,12 @@ void Venc::process_empty_buffer(OMX_BUFFERHEADERTYPE* pBufferHdr)
    if (result)
    {
      QC_OMX_MSG_ERROR("failed to encode frame");
+     if (m_sCallbacks.EmptyBufferDone(m_hSelf,
+          m_pAppData,
+          pBufferHdr) != OMX_ErrorNone)
+     {
+       QC_OMX_MSG_ERROR("EBD failed");
+     }
    }
    else
    {
@@ -4476,7 +4482,12 @@ void Venc::process_fill_buffer(OMX_BUFFERHEADERTYPE* pBufferHdr)
       if (driverRet)
       {
         QC_OMX_MSG_ERROR("failed to encode frame");
-        /// @integrate handle error
+	if (m_sCallbacks.FillBufferDone(m_hSelf,
+          m_pAppData,
+          pBufferHdr) != OMX_ErrorNone)
+        {
+          QC_OMX_MSG_ERROR("FBD failed");
+        }
       }
       else
       {
