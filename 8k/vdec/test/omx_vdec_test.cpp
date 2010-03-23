@@ -175,6 +175,7 @@ OMX_ERRORTYPE error;
 
 static int fb_fd = -1;
 static struct fb_var_screeninfo vinfo;
+static struct fb_fix_screeninfo finfo;
 void render_fb(struct OMX_BUFFERHEADERTYPE *pBufHdr);
 
 /************************************************************************/
@@ -844,6 +845,11 @@ int main(int argc, char **argv)
 
       if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo) < 0) {
           printf("[omx_vdec_test] - ERROR - can't retrieve vscreenInfo!\n");
+          close(fb_fd);
+          return -1;
+      }
+      if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo) < 0) {
+          printf("[omx_vdec_test] - ERROR - can't retrieve fscreenInfo!\n");
           close(fb_fd);
           return -1;
       }
@@ -2338,7 +2344,7 @@ void render_fb(struct OMX_BUFFERHEADERTYPE *pBufHdr)
     QTV_MSG_PRIO2(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,
                   "pmemOffset %d pmemID %d\n",e->src.offset,e->src.memory_id);
 
-    e->dst.width = vinfo.xres;
+    e->dst.width  = finfo.line_length/2;
     e->dst.height = vinfo.yres;
     e->dst.format = MDP_RGB_565;
     e->dst.offset = 0;
@@ -2384,7 +2390,7 @@ void render_fb(struct OMX_BUFFERHEADERTYPE *pBufHdr)
      default:
             destx = 0;
             desty = 0;
-            destW = vinfo.xres;
+            destW = finfo.line_length;
             destH = vinfo.yres;
     }
 
