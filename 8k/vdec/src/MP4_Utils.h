@@ -104,12 +104,13 @@ typedef signed char int8;   /* Signed 8  bit value */
 
 typedef unsigned char byte;   /* Unsigned 8  bit value type. */
 //#endif
-#define RESERVED_OBJECT_TYPE             0x00
 #define SIMPLE_PROFILE_LEVEL0            0x08
 #define SIMPLE_PROFILE_LEVEL1            0x01
 #define SIMPLE_PROFILE_LEVEL2            0x02
 #define SIMPLE_PROFILE_LEVEL3            0x03
 #define SIMPLE_PROFILE_LEVEL4A            0x04
+#define SIMPLE_PROFILE_LEVEL5            0x05
+#define SIMPLE_PROFILE_LEVEL6            0x06
 
 #define SIMPLE_SCALABLE_PROFILE_LEVEL0                  0x10
 #define SIMPLE_SCALABLE_PROFILE_LEVEL1                  0x11
@@ -133,6 +134,7 @@ typedef unsigned char byte;   /* Unsigned 8  bit value type. */
 #define VOP_START_CODE_MASK                 0xFFFFFFFF
 #define VOP_START_CODE                      0x000001B6
 #define SHORT_HEADER_MASK                   0xFFFFFC00
+#define SHORT_HEADER_START_MARKER           0x00008000
 #define SHORT_HEADER_START_CODE             0x00008000
 #define SPARK1_START_CODE                   0x00008400
 #define MPEG4_SHAPE_RECTANGULAR               0x00
@@ -142,6 +144,35 @@ typedef unsigned char byte;   /* Unsigned 8  bit value type. */
 #define MP4ERROR_UNSUPPORTED_UFEP                   -1068
 #define MP4ERROR_UNSUPPORTED_SOURCE_FORMAT          -1069
 #define MASK(x) (0xFFFFFFFF >> (32 - (x)))
+#define VISUAL_OBJECT_TYPE_VIDEO_ID         0x1
+#define VISUAL_OBJECT_START_CODE            0x000001B5
+#define VIDEO_OBJECT_START_CODE_MASK        0xFFFFFFE0
+#define VIDEO_OBJECT_START_CODE             0x00000100
+
+#define RESERVED_OBJECT_TYPE                0x0
+#define SIMPLE_OBJECT_TYPE                  0x1
+#define SIMPLE_SCALABLE_OBJECT_TYPE         0x2
+#define CORE_OBJECT_TYPE                    0x3
+#define MAIN_OBJECT_TYPE                    0x4
+#define N_BIT_OBJECT_TYPE                   0x5
+#define BASIC_ANIMATED_2D_TEXTURE           0x6
+#define ANIMATED_2D_MESH                    0x7
+#define ADVANCED_SIMPLE                     0x11
+
+
+#define SIMPLE_L1_MAX_VBVBUFFERSIZE 10  /* VBV Max Buffer size=10 (p. 498)  */
+#define SIMPLE_L1_MAX_BITRATE       160 /* is is 64kpbs or 160 400bits/sec units */
+#define SIMPLE_L2_MAX_VBVBUFFERSIZE 40  /* VBV Max Buffer size = 40 */
+#define SIMPLE_L2_MAX_BITRATE       320 /* 320 400bps units = 128kpbs */
+#define SIMPLE_L3_MAX_VBVBUFFERSIZE 40  /* VBV Max Buffer size = 40 */
+#define SIMPLE_L3_MAX_BITRATE       960 /* 960 400bps units = 384kpbs */
+
+/* The MP4 decoder currently supports Simple Profile@L3 */
+#define MAX_VBVBUFFERSIZE (SIMPLE_L3_MAX_VBVBUFFERSIZE)
+#define MAX_BITRATE       (SIMPLE_L3_MAX_BITRATE)
+
+#define MAX_QUANTPRECISION 9
+#define MIN_QUANTPRECISION 3
 
 #define MP4_VGA_WIDTH             640
 #define MP4_VGA_HEIGHT            480
@@ -189,7 +220,6 @@ class MP4_Utils {
    byte *m_dataBeginPtr;
 
    uint16 m_SrcWidth, m_SrcHeight;   // Dimensions of the source clip
-   bool validate_profile_and_level(uint32 profile_and_level_indication);
 
    bool m_default_profile_chk;
    bool m_default_level_chk;

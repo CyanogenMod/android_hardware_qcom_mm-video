@@ -7183,7 +7183,7 @@ OMX_ERRORTYPE omx_vdec::omx_vdec_check_port_settings(OMX_BUFFERHEADERTYPE *
       dataStream.numBytes = (unsigned long int)buf_len;
       if (false == m_mp4_utils->parseHeader(&dataStream)) {
          QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
-                 "Parsing Error unsupported profile or level\n");
+                 "VOL header parsing failure, aborting playback\n");
          return OMX_ErrorStreamCorrupt;
       }
       cropx = cropy = 0;

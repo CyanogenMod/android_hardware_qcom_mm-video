@@ -428,6 +428,11 @@ DESCRIPTION:
   This function parses the VOL header and populates frame height and width
   into MP4_Utils.
 
+NOTE:
+ Q6 repeates the same parsing at its end and in the case of parsing failure it
+ wont tell us the reason, so we need to repeat atleast a abridged version
+ of parse, to know the reason if there is a parse failure.
+
 INPUT/OUTPUT PARAMETERS:
   psBits - pointer to input stream of bits
 
@@ -441,147 +446,449 @@ SIDE EFFECTS:
 
 bool MP4_Utils::parseHeader(mp4StreamType * psBits) {
    uint32 profile_and_level_indication = 0;
-   uint32 ver_id = 1,sprite_enable = 0;
+   uint8 VerID = 1; /* default value */
    long hxw = 0;
-//  ASSERT( psBits != NULL );
-//  ASSERT( psBits->data != NULL );
+
    m_posInfo.bitPos = 0;
    m_posInfo.bytePtr = psBits->data;
    m_dataBeginPtr = psBits->data;
-   m_posInfo.bytePtr = find_code(m_posInfo.bytePtr,
-                  psBits->numBytes,
-                  VIDEO_OBJECT_LAYER_START_CODE_MASK,
-                  VIDEO_OBJECT_LAYER_START_CODE);
 
-   if (m_posInfo.bytePtr == NULL) {
-      printf
-          ("Unable to find VIDEO_OBJECT_LAYER_START_CODE,returning MP4_INVALID_VOL_PARAM \n");
-      m_posInfo.bitPos = 0;
+
+
+   /* parsing Visual Object Seqence(VOS) header */
+   m_posInfo.bytePtr = find_code(m_posInfo.bytePtr,
+                                 psBits->numBytes,
+                                 MASK(32),
+                                 VISUAL_OBJECT_SEQUENCE_START_CODE);
+
+   if ( m_posInfo.bytePtr == NULL )
+   {
+      QTV_MSG(QTVDIAG_VIDEO_TASK,"Video bit stream is not starting \
+         with VISUAL_OBJECT_SEQUENCE_START_CODE");
+      m_posInfo.bitPos  = 0;
       m_posInfo.bytePtr = psBits->data;
-      m_posInfo.bytePtr = find_code(m_posInfo.bytePtr,
-                     psBits->numBytes,
-                     SHORT_HEADER_MASK,
-                     SHORT_HEADER_START_CODE);
-      if (m_posInfo.bytePtr) {
-         if (MP4ERROR_SUCCESS ==
-             populateHeightNWidthFromShortHeader(psBits))
+
+      uint32 start_marker = read_bit_field (&m_posInfo, 32);
+      if ( (start_marker & SHORT_HEADER_MASK) == SHORT_HEADER_START_MARKER )
+      {
+         if(MP4ERROR_SUCCESS == populateHeightNWidthFromShortHeader(psBits))
+         {
+            QTV_MSG(QTVDIAG_VIDEO_TASK,"Short Header Found and parsed succesfully");
             return true;
-         else {
-            printf("Error in parsing the short header \n");
+         }
+         else
+         {
+            QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+               "Short Header parsing failure");
             return false;
          }
-      } else {
-         printf
-             ("Unable to find VIDEO_OBJECT_LAYER_START_CODE or SHORT_HEADER_START_CODE returning MP4_INVALID_VOL_PARAM \n");
-         m_posInfo.bitPos = 0;
-         m_posInfo.bytePtr = psBits->data;
+      }
+      else
+      {
+          QTV_MSG(QTVDIAG_VIDEO_TASK, "Could not find short header either");
+          m_posInfo.bitPos = 0;
+          m_posInfo.bytePtr = psBits->data;
+      }
+   }
+   else
+   {
+      uint32 profile_and_level_indication = read_bit_field (&m_posInfo, 8);
+      QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,
+         "MP4 profile and level %lx",profile_and_level_indication);
+
+      if ((m_default_profile_chk && m_default_level_chk)
+       && (profile_and_level_indication != RESERVED_OBJECT_TYPE)
+       && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL0)
+       && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL1)
+       && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL2)
+       && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL3)
+       && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL4A)
+       && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL5)
+       && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL6)
+       && (profile_and_level_indication != SIMPLE_SCALABLE_PROFILE_LEVEL0)
+       && (profile_and_level_indication != SIMPLE_SCALABLE_PROFILE_LEVEL1)
+       && (profile_and_level_indication != SIMPLE_SCALABLE_PROFILE_LEVEL2)
+       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL0)
+       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL1)
+       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL2)
+       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL3)
+       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL4)
+       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL5))
+      {
+         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_FATAL,
+              "Caution: INVALID_PROFILE_AND_LEVEL 0x%lx \n",profile_and_level_indication);
          return false;
       }
    }
+
+
+
+
+   /* parsing Visual Object(VO) header*/
+   /* note: for now, we skip over the user_data */
+   m_posInfo.bytePtr = find_code(m_posInfo.bytePtr,
+                             psBits->numBytes,
+                             MASK(32),
+                             VISUAL_OBJECT_START_CODE);
+   if(m_posInfo.bytePtr == NULL)
+   {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+         "Could not find VISUAL_OBJECT_START_CODE");
+
+      m_posInfo.bitPos = 0;
+      m_posInfo.bytePtr = psBits->data;
+   }
+   else
+   {
+      uint32 is_visual_object_identifier = read_bit_field (&m_posInfo, 1);
+      if ( is_visual_object_identifier )
+      {
+         /* visual_object_verid*/
+         read_bit_field (&m_posInfo, 4);
+         /* visual_object_priority*/
+         read_bit_field (&m_posInfo, 3);
+      }
+
+      /* visual_object_type*/
+      uint32 visual_object_type = read_bit_field (&m_posInfo, 4);
+      if ( visual_object_type != VISUAL_OBJECT_TYPE_VIDEO_ID )
+      {
+         QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+            "visual_object_type can only be VISUAL_OBJECT_TYPE_VIDEO_ID");
+        return false;
+      }
+      /* skipping video_signal_type params*/
+
+
+      /*parsing Video Object header*/
+      m_posInfo.bytePtr = find_code(m_posInfo.bytePtr,
+                                    psBits->numBytes,
+                                    VIDEO_OBJECT_START_CODE_MASK,
+                                    VIDEO_OBJECT_START_CODE);
+      if ( m_posInfo.bytePtr == NULL )
+      {
+         QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_FATAL,
+            "Unable to find VIDEO_OBJECT_START_CODE");
+        return false;
+      }
+   }
+
+   /* parsing Video Object Layer(VOL) header */
+   m_posInfo.bitPos = 0;
+   m_posInfo.bytePtr = find_code(m_posInfo.bytePtr,
+                            psBits->numBytes,
+                            VIDEO_OBJECT_LAYER_START_CODE_MASK,
+                            VIDEO_OBJECT_LAYER_START_CODE);
+   if ( m_posInfo.bytePtr == NULL )
+   {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+         "Unable to find VIDEO_OBJECT_LAYER_START_CODE");
+      m_posInfo.bitPos = 0;
+      m_posInfo.bytePtr = psBits->data;
+      m_posInfo.bytePtr = find_code(m_posInfo.bytePtr,
+                                psBits->numBytes,
+                                SHORT_HEADER_MASK,
+                                SHORT_HEADER_START_CODE);
+      if( m_posInfo.bytePtr )
+      {
+         if(MP4ERROR_SUCCESS == populateHeightNWidthFromShortHeader(psBits))
+         {
+            return true;
+         }
+         else
+         {
+            QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+               "Short Header parsing failure");
+            return false;
+         }
+      }
+      else
+      {
+         QTV_MSG(QTVDIAG_VIDEO_TASK,
+                 "Unable to find VIDEO_OBJECT_LAYER or SHORT_HEADER START CODE");
+         return MP4_INVALID_VOL_PARAM;
+      }
+   }
+
    // 1 -> random accessible VOL
    read_bit_field(&m_posInfo, 1);
 
-   // 8 -> video_object_type indication
-   profile_and_level_indication = read_bit_field(&m_posInfo, 8);
+   uint32 video_object_type_indication = read_bit_field (&m_posInfo, 8);
+   QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,
+      "Video Object Type %lx",video_object_type_indication);
+   if ( (video_object_type_indication != SIMPLE_OBJECT_TYPE) &&
+       (video_object_type_indication != SIMPLE_SCALABLE_OBJECT_TYPE) &&
+       (video_object_type_indication != CORE_OBJECT_TYPE) &&
+       (video_object_type_indication != ADVANCED_SIMPLE) &&
+       (video_object_type_indication != RESERVED_OBJECT_TYPE) &&
+       (video_object_type_indication != MAIN_OBJECT_TYPE))
+   {
+      QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+         "Video Object Type not supported %lx",video_object_type_indication);
+      return false;
+   }
+   /* is_object_layer_identifier*/
+   uint32 is_object_layer_identifier = read_bit_field (&m_posInfo, 1);
+   if ( is_object_layer_identifier )
+   {
+      uint32 video_object_layer_verid = read_bit_field (&m_posInfo, 4);
+      uint32 video_object_layer_priority = read_bit_field (&m_posInfo, 3);
+      VerID = (unsigned char)is_object_layer_identifier;
+   }
 
-   // 1 -> is_object_layer_identifier
-   if (read_bit_field(&m_posInfo, 1)) {
-      // 4 -> video_object_layer_verid
-      // 3 -> video_object_layer_priority
-      ver_id = read_bit_field (&m_posInfo, 4);
-      read_bit_field(&m_posInfo, 3);
+  /* aspect_ratio_info*/
+  uint32 aspect_ratio_info = read_bit_field (&m_posInfo, 4);
+  if ( aspect_ratio_info == EXTENDED_PAR )
+  {
+    /* par_width*/
+    read_bit_field (&m_posInfo, 8);
+    /* par_height*/
+    read_bit_field (&m_posInfo, 8);
+  }
+
+
+
+   /* vol_control_parameters */
+   uint32 vol_control_parameters = read_bit_field (&m_posInfo, 1);
+   if ( vol_control_parameters )
+   {
+      /* chroma_format*/
+      uint32 chroma_format = read_bit_field (&m_posInfo, 2);
+      if ( chroma_format != 1 )
+      {
+         QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+            "returning CHROMA_FORMAT_NOT_4_2_0 ");
+         return false;
+      }
+
+      /* low_delay*/
+      uint32 low_delay = read_bit_field (&m_posInfo, 1);
+      if ( !low_delay )
+      {
+         QTV_MSG(QTVDIAG_VIDEO_TASK,"Possible B_VOPs in bitstream.");
+      }
+
+      /* vbv_parameters (annex D)*/
+      uint32 vbv_parameters = read_bit_field (&m_posInfo, 1);
+      if ( vbv_parameters )
+      {
+         /* first_half_bitrate*/
+         uint32 first_half_bitrate = read_bit_field (&m_posInfo, 15);
+         uint32 marker_bit = read_bit_field (&m_posInfo, 1);
+         if ( marker_bit != 1)
+         {
+            QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+               "Marker bit not enabled, VOL header parsing failure ");
+            return false;
+         }
+
+         /* latter_half_bitrate*/
+         uint32 latter_half_bitrate = read_bit_field (&m_posInfo, 15);
+         marker_bit = read_bit_field (&m_posInfo, 1);
+         if ( marker_bit != 1)
+         {
+            QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+               "Marker bit not enabled, VOL header parsing failure ");
+            return false;
+         }
+
+         uint32 VBVPeakBitRate = (first_half_bitrate << 15) + latter_half_bitrate;
+         if ( VBVPeakBitRate > MAX_BITRATE )
+         {
+             QTV_MSG_PRIO1(QTVDIAG_VIDEO_TASK, QTVDIAG_PRIO_ERROR,
+                            "VBV MAX_BITRATE_EXCEEDED %lx",VBVPeakBitRate);
+         }
+         else
+         {
+             QTV_MSG_PRIO1(QTVDIAG_VIDEO_TASK, QTVDIAG_PRIO_ERROR,
+                            "VBV Peak bit rate %lx",VBVPeakBitRate);
+         }
+
+         /* first_half_vbv_buffer_size*/
+         uint32 first_half_vbv_buffer_size = read_bit_field (&m_posInfo, 15);
+         marker_bit = read_bit_field (&m_posInfo, 1);
+         if ( marker_bit != 1)
+         {
+            QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+               "Marker bit not enabled, VOL header parsing failure ");
+            return false;
+         }
+
+         /* latter_half_vbv_buffer_size*/
+         uint32 latter_half_vbv_buffer_size = read_bit_field (&m_posInfo, 3);
+
+         uint32 VBVBufferSize = (first_half_vbv_buffer_size << 3) + latter_half_vbv_buffer_size;
+         if ( VBVBufferSize > MAX_VBVBUFFERSIZE )
+         {
+             QTV_MSG_PRIO1(QTVDIAG_VIDEO_TASK, QTVDIAG_PRIO_ERROR,
+               "VBV MAX_VBVBUFFERSIZE_EXCEEDED %lx",VBVBufferSize);
+         }
+
+         /* first_half_vbv_occupancy*/
+         uint32 first_half_vbv_occupancy = read_bit_field (&m_posInfo, 11);
+         marker_bit = read_bit_field (&m_posInfo, 1);
+         if ( marker_bit != 1)
+         {
+            QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+            "Marker bit not enabled, VOL header parsing failure ");
+            return false;
+         }
+
+         /* latter_half_vbv_occupancy*/
+         uint32 latter_half_vbv_occupancy = read_bit_field (&m_posInfo, 15);
+         marker_bit = read_bit_field (&m_posInfo, 1);
+         if ( marker_bit != 1)
+         {
+            QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+               "Marker bit not enabled, VOL header parsing failure ");
+            return false;
+         }
+      }/* vbv_parameters*/
+   }/*vol_control_parameters*/
+
+
+   /* video_object_layer_shape*/
+   uint32 video_object_layer_shape = read_bit_field (&m_posInfo, 2);
+   uint8 VOLShape = (unsigned char)video_object_layer_shape;
+   if ( VOLShape != MPEG4_SHAPE_RECTANGULAR )
+   {
+       QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+         "NON RECTANGULAR_SHAPE detected, it is not supported");
+       return false;
    }
-   // 4 -> aspect_ratio_info
-   if (EXTENDED_PAR == read_bit_field(&m_posInfo, 4)) {
-      //8 -> par_width
-      //8 -> par_height
-      read_bit_field(&m_posInfo, 16);
+
+   /* marker_bit*/
+   uint32 marker_bit = read_bit_field (&m_posInfo, 1);
+   if ( marker_bit != 1 )
+   {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+         "Marker bit not enabled, VOL header parsing failure ");
+      return false;
    }
-   //1 -> vol_control_parameters
-   if (read_bit_field(&m_posInfo, 1)) {
-      //2 -> chroma_format
-      //1 -> low_delay
-      read_bit_field(&m_posInfo, 3);
-      //1-> vbv_parameters
-      if (read_bit_field(&m_posInfo, 1)) {
-         //15 -> first_half_bit_rate
-         //1 -> marker_bit
-         //15 -> latter_half_bit_rate
-         //1 -> marker_bit
-         //15 -> first_half_vbv_buffer_size
-         //1 -> marker_bit
-         //3 -> latter_half_vbv_buffer_size
-         //11 -> first_half_vbv_occupancy
-         //1 -> marker_bit
-         //15 -> latter_half_vbv_occupancy
-         //1 -> marker_bit
-         read_bit_field(&m_posInfo, 79);
+
+   /* vop_time_increment_resolution*/
+   uint32 vop_time_increment_resolution = read_bit_field (&m_posInfo, 16);
+   uint16 TimeIncrementResolution = (unsigned short)vop_time_increment_resolution;
+   /* marker_bit*/
+   marker_bit = read_bit_field (&m_posInfo, 1);
+   if ( marker_bit != 1 )
+   {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+         "Marker bit not enabled, VOL header parsing failure ");
+      return false;
+   }
+
+   /* compute the nr. of bits for time information in bitstream*/
+   {
+       int i,j;
+       uint8 NBitsTime=0;
+       i = TimeIncrementResolution-1;
+       j = 0;
+       while (i)
+       {
+         j++;
+         i>>=1;
+       }
+           if (j)
+            NBitsTime = j;
+           else
+               /* the time increment resolution is 1, so we need one bit to
+               ** represent it
+               */
+               NBitsTime = 1;
+
+      /* fixed_vop_rate*/
+      uint32 fixed_vop_rate = read_bit_field (&m_posInfo, 1);
+      if ( fixed_vop_rate )
+      {
+          /* fixed_vop_increment*/
+         read_bit_field (&m_posInfo, NBitsTime);
       }
    }
-   if (MPEG4_SHAPE_RECTANGULAR !=
-       (unsigned char)read_bit_field(&m_posInfo, 2)) {
-      printf("returning NON_RECTANGULAR_SHAPE \n");
-      return false;
-   }
-   //1 -> marker bit
-   read_bit_field(&m_posInfo, 1);
-   //16 -> vop_time_increment_resolution
-   unsigned short time_increment_res =
-       (unsigned short)read_bit_field(&m_posInfo, 16);
-   int i, j;
-   int nBitsTime;
-   // claculating VOP resolution
-   i = time_increment_res - 1;
-   j = 0;
-   while (i) {
-      j++;
-      i >>= 1;
-   }
-   if (j)
-      nBitsTime = j;
-   else
-      nBitsTime = 1;
 
-   //1 -> marker_bit
-   read_bit_field(&m_posInfo, 1);
-   //1 -> fixed_vop_rate
-   if (read_bit_field(&m_posInfo, 1)) {
-      //nBitsTime -> fixed_vop_increment
-      read_bit_field(&m_posInfo, nBitsTime);
+
+  /* marker_bit*/
+   marker_bit = read_bit_field (&m_posInfo, 1);
+   if ( marker_bit != 1 )
+   {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+         "Marker bit not enabled, VOL header parsing failure ");
+      return false;
    }
-   if (1 != read_bit_field(&m_posInfo, 1))
-      return false;
-   m_SrcWidth = read_bit_field(&m_posInfo, 13);
-   if (1 != read_bit_field(&m_posInfo, 1))
-      return false;
-   m_SrcHeight = read_bit_field(&m_posInfo, 13);
+
+   /* video_object_layer_width*/
+   m_SrcWidth  = (uint16)read_bit_field (&m_posInfo, 13);
+
    /* marker_bit*/
-   read_bit_field (&m_posInfo, 1);
+   marker_bit = read_bit_field (&m_posInfo, 1);
+   if ( marker_bit != 1 )
+   {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+         "Marker bit not enabled, VOL header parsing failure ");
+      return false;
+   }
+
+   /* video_object_layer_height*/
+   m_SrcHeight  = (uint16)read_bit_field (&m_posInfo, 13);
+
+   /* marker_bit*/
+   marker_bit = read_bit_field (&m_posInfo, 1);
+   if ( marker_bit != 1 )
+   {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+         "Marker bit not enabled, VOL header parsing failure ");
+      return false;
+   }
+
+
    /* interlaced*/
-   read_bit_field (&m_posInfo, 1);
+   uint32 interlaced = read_bit_field (&m_posInfo, 1);
+   if (interlaced)
+   {
+      QTV_MSG(QTVDIAG_VIDEO_TASK,"INTERLACED frames detected");
+   }
+
    /* obmc_disable*/
-   read_bit_field (&m_posInfo, 1);
+   uint32 obmc_disable = read_bit_field (&m_posInfo, 1);
+   if ( !obmc_disable )
+   {
+       QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+         "returning OBMC_Enabled it is not supported ");
+       return false;
+   }
+
    /* Nr. of bits for sprite_enabled is 1 for version 1, and 2 for
    ** version 2, according to p. 114, Table v2-2. */
    /* sprite_enable*/
-   if(ver_id == 1) {
-      sprite_enable = read_bit_field (&m_posInfo, 1);
-   }
-   else {
-      sprite_enable = read_bit_field (&m_posInfo, 2);
-   }
-   if (sprite_enable) {
-       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,"No Support for Sprite Enabled clips\n");
-       return false;
-   }
-   /* not_8_bit*/
-   if ( read_bit_field (&m_posInfo, 1) )
+   uint32 sprite_enable = read_bit_field (&m_posInfo,VerID);
+   if ( sprite_enable  )
    {
-     /* quant_precision*/
-     read_bit_field (&m_posInfo, 4);
-     /* bits_per_pixel*/
-     read_bit_field (&m_posInfo, 4);
+      QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_FATAL,
+         "returning SPRITE_VOP_NG Not Supported ");
+      return false;
    }
+
+   uint32 not_8_bit = read_bit_field (&m_posInfo, 1);
+   if ( not_8_bit )
+   {
+      /* quant_precision*/
+      uint32 quant_precision = read_bit_field (&m_posInfo, 4);
+       if ( quant_precision  < MIN_QUANTPRECISION
+            || quant_precision  > MAX_QUANTPRECISION )
+      {
+         QTV_MSG(QTVDIAG_VIDEO_TASK,"returning INVALID_QUANT_PRECISION ");
+         return false;
+      }
+
+      /* bits_per_pixel*/
+      uint32 BitsPerPixel = read_bit_field (&m_posInfo, 4);
+      if ( BitsPerPixel < 4 || BitsPerPixel > 12 )
+      {
+      QTV_MSG(QTVDIAG_VIDEO_TASK,"returning INVALID_BITS_PER_PIXEL ");
+      return false;
+      }
+   }
+
    /* quant_type*/
    if (read_bit_field (&m_posInfo, 1)) {
      /*load_intra_quant_mat*/
@@ -607,7 +914,7 @@ bool MP4_Utils::parseHeader(mp4StreamType * psBits) {
        }
      }
    }
-   if ( ver_id != 1 )
+   if ( VerID != 1 )
    {
      /* quarter_sample*/
      read_bit_field (&m_posInfo, 1);
@@ -620,13 +927,14 @@ bool MP4_Utils::parseHeader(mp4StreamType * psBits) {
    if ( read_bit_field (&m_posInfo, 1) ) {
      hxw = m_SrcWidth* m_SrcHeight;
      if(hxw > (OMX_CORE_WVGA_WIDTH*OMX_CORE_WVGA_HEIGHT)) {
-       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,"Data partition clips not supported for Greater than WVGA resolution \n");
+       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+         "Data partition clips not supported for Greater than WVGA resolution \n");
        return false;
      }
    }
 
-   // not doing the remaining parsing
-   return validate_profile_and_level(profile_and_level_indication);
+   return true;
+
 }
 
 /*===========================================================================
@@ -758,51 +1066,6 @@ bool MP4_Utils::HasFrame(OMX_IN OMX_BUFFERHEADERTYPE * buffer)
 {
    return find_code(buffer->pBuffer, buffer->nFilledLen,
           VOP_START_CODE_MASK, VOP_START_CODE) != NULL;
-}
-
-/*===========================================================================
-FUNCTION:
-  validate_profile_and_level
-
-DESCRIPTION:
-  This function validate the profile and level that is supported.
-
-INPUT/OUTPUT PARAMETERS:
-  uint32 profile_and_level_indication
-
-RETURN VALUE:
-  false it it's not supported
-  true otherwise
-
-SIDE EFFECTS:
-  None.
-===========================================================================*/
-bool MP4_Utils::validate_profile_and_level(uint32 profile_and_level_indication)
-{
-   QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
-            "MP4 profile and level %d\n",
-            profile_and_level_indication);
-   if ((m_default_profile_chk && m_default_level_chk)
-       && (profile_and_level_indication != RESERVED_OBJECT_TYPE)
-       && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL0)
-       && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL1)
-       && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL2)
-       && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL3)
-       && (profile_and_level_indication != SIMPLE_PROFILE_LEVEL4A)
-       && (profile_and_level_indication != SIMPLE_SCALABLE_PROFILE_LEVEL0)
-       && (profile_and_level_indication != SIMPLE_SCALABLE_PROFILE_LEVEL1)
-       && (profile_and_level_indication != SIMPLE_SCALABLE_PROFILE_LEVEL2)
-       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL0)
-       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL1)
-       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL2)
-       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL3)
-       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL4)
-       && (profile_and_level_indication != ADVANCED_SIMPLE_PROFILE_LEVEL5)) {
-      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_FATAL,
-              "Caution: INVALID_PROFILE_AND_LEVEL 0x%x \n", profile_and_level_indication);
-      return false;
-   }
-   return true;
 }
 
 /*===========================================================================
