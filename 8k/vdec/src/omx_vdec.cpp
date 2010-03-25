@@ -5167,6 +5167,7 @@ OMX_ERRORTYPE omx_vdec::
                    bInterlace, cropx, cropy,
                    cropdx, cropdy);
       if (ret != OMX_ErrorNone) {
+         buffer_done_cb_stub(&m_vdec_cfg, buffer);
          m_bInvalidState = true;
          m_cb.EventHandler(&m_cmp, m_app_data, OMX_EventError,
                  OMX_ErrorFormatNotDetected , 0, NULL);
