@@ -291,7 +291,7 @@ boolean H264_Utils::extract_rbsp(OMX_IN OMX_U8 * buffer,
       do {
          if (pos >= buffer_length) {
             QTV_MSG_PRIO1(QTVDIAG_GENERAL,
-                     QTVDIAG_PRIO_ERROR,
+                     QTVDIAG_PRIO_HIGH,
                      "Error at extract rbsp line %d",
                      __LINE__);
             return false;
@@ -1383,7 +1383,7 @@ OMX_U32 H264_Utils::check_header(OMX_IN OMX_BUFFERHEADERTYPE * buffer,
 
    if (!sizeofNAL) {
 
-      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
                "check_header: start code %d",
                buffer->nFilledLen);
       // Search start_code_prefix_one_3bytes (0x000001)
@@ -1403,13 +1403,13 @@ OMX_U32 H264_Utils::check_header(OMX_IN OMX_BUFFERHEADERTYPE * buffer,
          coef3 = buffer->pBuffer[pos++];
       } while (coef1 || coef2 || coef3 != 1);
 
-      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
                "check_header: start code got fisrt NAL %d", pos);
       nal1_ptr = (OMX_U8 *) & buffer->pBuffer[pos];
 
       // Search start_code_prefix_one_3bytes (0x000001)
       if (pos + 2 < buffer->nFilledLen) {
-         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
                   "check_header: start code looking for second NAL %d",
                   pos);
          isPartial = false;
@@ -1418,7 +1418,7 @@ OMX_U32 H264_Utils::check_header(OMX_IN OMX_BUFFERHEADERTYPE * buffer,
          do {
             if (pos >= buffer->nFilledLen) {
                QTV_MSG_PRIO1(QTVDIAG_GENERAL,
-                        QTVDIAG_PRIO_ERROR,
+                        QTVDIAG_PRIO_HIGH,
                         "Error at extract rbsp line %d",
                         __LINE__);
                isPartial = true;
@@ -1448,7 +1448,7 @@ OMX_U32 H264_Utils::check_header(OMX_IN OMX_BUFFERHEADERTYPE * buffer,
 
 
       } else {
-         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
                   "check_header: start code partial nal in one buffer %d",
                   pos);
          if (headerState == 0
