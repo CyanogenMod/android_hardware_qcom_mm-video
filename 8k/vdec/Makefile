@@ -23,9 +23,6 @@ CPPFLAGS += -DFEATURE_DSM_DUP_ITEMS
 CPPFLAGS += -DPROFILE_DECODER
 CPPFLAGS += -Du32="unsigned int"
 CPPFLAGS += -Du8="unsigned char"
-CPPFLAGS += -Duint32_t="unsigned int"
-CPPFLAGS += -Duint16_t="unsigned short"
-CPPFLAGS += -Duint8_t="unsigned char"
 CPPFLAGS += -Iinc
 CPPFLAGS += -Isrc
 

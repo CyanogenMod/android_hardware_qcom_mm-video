@@ -41,6 +41,8 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <errno.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <stdint.h>
+
 #ifdef _ANDROID_
 #include <binder/MemoryHeapBase.h>
 #endif
