@@ -1161,6 +1161,7 @@ Vdec_ReturnType vdec_flush_port(struct VDecoder * dec, int *nFlushedFrames,
 {
    struct Vdec_pthread_info *pthread_info;
    int i = 0;
+   Vdec_ReturnType retVal=VDEC_SUCCESS;
    QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW, "vdec: flush \n");
    if (NULL == dec || NULL == dec->ctxt) {
       QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
@@ -1177,14 +1178,14 @@ Vdec_ReturnType vdec_flush_port(struct VDecoder * dec, int *nFlushedFrames,
        ((struct adsp_module *)dec->adsp_module, (unsigned int)port) < 0) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "Adsp Flush failed\n");
-      return VDEC_EFAILED;
+      retVal = VDEC_EFAILED;
+   }else{
+      /* this is to make flush a sync call*/
+      if (-1 == sem_wait(&pthread_info->flush_sem)) {
+         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "[vdec_flush] - sem_wait failed %d\n", errno);;
+      }
    }
-
-   if (-1 == sem_wait(&pthread_info->flush_sem)) {
-      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
-               "[vdec_flush] - sem_wait failed %d\n", errno);;
-   }
-
    /*Now release all the Input as well as Frame buffers */
    if (dec->ctxt->inputBuffer) {
       for (i = 0; i < dec->ctxt->inputReq.numMinBuffers; i++) {
@@ -1227,5 +1228,5 @@ Vdec_ReturnType vdec_flush_port(struct VDecoder * dec, int *nFlushedFrames,
          }
       }
    }
-   return VDEC_SUCCESS;
+   return retVal;
 }
