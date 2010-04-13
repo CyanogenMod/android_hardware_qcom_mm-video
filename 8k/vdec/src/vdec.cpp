@@ -717,7 +717,7 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
    struct Vdec_pthread_info *pthread_info;
    dec = (VDecoder *) calloc(1, sizeof(struct VDecoder));
 
-   QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR, "vdec_open\n");
+   QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW, "vdec_open\n");
    if (!dec)
       return 0;
 

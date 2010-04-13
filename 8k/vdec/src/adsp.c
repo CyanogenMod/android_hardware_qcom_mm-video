@@ -297,11 +297,11 @@ struct adsp_module *adsp_open(const char *name, struct adsp_open_info info,
                mod->fd, strerror(errno));
    } else {
         if(read(mod->cpu_dma_fd, &mod->cpu_dma_freq, sizeof(mod->cpu_dma_freq)) < 0) {
-            QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+            QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                       "ERROR - adsp: Request cpu_dma_freq read failed\n");
         }
         if(write(mod->cpu_dma_fd, &cpu_dma_freq, sizeof(cpu_dma_freq)) < 0) {
-            QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+            QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                       "ERROR - adsp: Request cpu_dma_freq write failed\n");
         }
    }

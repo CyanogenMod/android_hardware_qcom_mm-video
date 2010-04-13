@@ -1378,7 +1378,7 @@ OMX_U32 H264_Utils::check_header(OMX_IN OMX_BUFFERHEADERTYPE * buffer,
    OMX_U8 *nal1_ptr = NULL, *nal2_ptr = NULL;
 
    isPartial = true;
-   QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+   QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW,
            "H264_Utils::check_header ");
 
    if (!sizeofNAL) {

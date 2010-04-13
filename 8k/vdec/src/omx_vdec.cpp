@@ -106,7 +106,7 @@ void *genericQueue::Dequeue()
    head = head_next;
    --numElements;
    if (0 == numElements) {
-      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
               "FA: Setting Tail to NULL\n");
       tail = NULL;
    }
@@ -1712,7 +1712,7 @@ OMX_ERRORTYPE omx_vdec::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
          QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
                  "OMXCORE-SM:Enable should be on Ouput Port\n");
       }
-      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                "OMXCORE-SM:Recieved command ENABLE (%d)\n", cmd);
       // call vdec_open
       if (!m_vdec && (m_first_pending_buf_idx >= 0)) {
@@ -1770,7 +1770,7 @@ OMX_ERRORTYPE omx_vdec::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
             pPMEMInfo->pmem_fd = (OMX_U32) m_heap_ptr.get();
             pPMEMInfo++;
          }
-         QTV_MSG_PRIO3(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+         QTV_MSG_PRIO3(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                   "VideoHeap : fd %d data %d size %d\n",
                   ((vdec_frame *) (&m_vdec_cfg.
                          outputBuffer[0]))->
@@ -1778,7 +1778,7 @@ OMX_ERRORTYPE omx_vdec::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
                   ((vdec_frame *) (&m_vdec_cfg.
                          outputBuffer[0]))->
                   buffer.base, m_vdec->arena[0].size);
-         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                   "m_heap_ptr =%d",
                   (unsigned)m_heap_ptr.get());
 #endif //_ANDROID_
@@ -4651,7 +4651,7 @@ OMX_ERRORTYPE omx_vdec::allocate_buffer(OMX_IN OMX_HANDLETYPE hComp,
                pPMEMInfo++;
             }
             QTV_MSG_PRIO3(QTVDIAG_GENERAL,
-                     QTVDIAG_PRIO_ERROR,
+                     QTVDIAG_PRIO_MED,
                      "VideoHeap : fd %d data %d size %d\n",
                      ((vdec_frame *) (&m_vdec_cfg.
                             outputBuffer
@@ -4662,7 +4662,7 @@ OMX_ERRORTYPE omx_vdec::allocate_buffer(OMX_IN OMX_HANDLETYPE hComp,
                             [0]))->buffer.
                      base, m_vdec->arena[0].size);
             QTV_MSG_PRIO1(QTVDIAG_GENERAL,
-                     QTVDIAG_PRIO_ERROR,
+                     QTVDIAG_PRIO_MED,
                      "m_heap_ptr =%d",
                      (unsigned)m_heap_ptr.get());
 #endif //_ANDROID_
@@ -5267,7 +5267,7 @@ OMX_ERRORTYPE omx_vdec::
                pPMEMInfo++;
             }
             QTV_MSG_PRIO3(QTVDIAG_GENERAL,
-                     QTVDIAG_PRIO_ERROR,
+                     QTVDIAG_PRIO_MED,
                      "VideoHeap : fd %d data %d size %d\n",
                      ((vdec_frame *) (&m_vdec_cfg.
                             outputBuffer
@@ -5278,7 +5278,7 @@ OMX_ERRORTYPE omx_vdec::
                             [0]))->buffer.
                      base, m_vdec->arena[0].size);
             QTV_MSG_PRIO1(QTVDIAG_GENERAL,
-                     QTVDIAG_PRIO_ERROR,
+                     QTVDIAG_PRIO_MED,
                      "m_heap_ptr =%d",
                      (unsigned)m_heap_ptr.get());
 #endif //_ANDROID_
@@ -6007,7 +6007,7 @@ OMX_ERRORTYPE omx_vdec::
    bool is_frame_no_error = true;
 
    if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.avc", 26) == 0) {
-      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
               "add_entry_subframe_stitching- H264\n");
       is_frame_no_error =
           m_h264_utils->isNewFrame(buffer->pBuffer + buffer->nOffset,
@@ -6047,7 +6047,7 @@ OMX_ERRORTYPE omx_vdec::
             nBufferIndex = m_pcurrent_frame - ((OMX_BUFFERHEADERTYPE *) m_inp_mem_ptr);
           }
           m_pcurrent_frame->nFlags |= buffer->nFlags;
-         QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+         QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                  "add_entry_subframe_stitching - add entry previous buffer\n");
          add_entry(nBufferIndex);
       }
@@ -6057,7 +6057,7 @@ OMX_ERRORTYPE omx_vdec::
          m_pcurrent_frame->nOffset = 0;
       }
    } else if (m_bArbitraryBytes) {
-      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
               "add_entry_subframe_stitching arbitrary bytes -  SUBFRAME_TYPE_PREVIOUS_FRAME\n");
       if (m_pcurrent_frame == NULL) {
          QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
