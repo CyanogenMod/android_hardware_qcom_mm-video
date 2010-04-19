@@ -633,7 +633,7 @@ bool MP4_Utils::parseHeader(mp4StreamType * psBits) {
    {
       uint32 video_object_layer_verid = read_bit_field (&m_posInfo, 4);
       uint32 video_object_layer_priority = read_bit_field (&m_posInfo, 3);
-      VerID = (unsigned char)is_object_layer_identifier;
+      VerID = (unsigned char)video_object_layer_verid;
    }
 
   /* aspect_ratio_info*/
