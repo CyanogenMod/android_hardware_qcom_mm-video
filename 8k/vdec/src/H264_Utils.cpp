@@ -397,12 +397,13 @@ bool H264_Utils::isNewFrame(OMX_IN OMX_U8 * buffer,
              OMX_IN OMX_U32 buffer_length,
              OMX_IN OMX_U32 size_of_nal_length_field,
              OMX_OUT OMX_BOOL & isNewFrame,
-             bool & isforceToStichNextNAL)
+             bool & isUpdateTimestamp)
 {
    NALU nal_unit;
    uint16 first_mb_in_slice = 0;
    uint32 numBytesInRBSP = 0;
    bool eRet = true;
+   isUpdateTimestamp = false;
 
    QTV_MSG_PRIO3(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
             "get_h264_nal_type %p nal_length %d nal_length_field %d\n",
@@ -416,18 +417,25 @@ bool H264_Utils::isNewFrame(OMX_IN OMX_U8 * buffer,
       isNewFrame = OMX_FALSE;
       eRet = false;
    } else {
+
+      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+      "Nalu type: %d",nal_unit.nalu_type);
+
       switch (nal_unit.nalu_type) {
       case NALU_TYPE_IDR:
       case NALU_TYPE_NON_IDR:
          {
-            if (m_forceToStichNextNAL) {
-               isNewFrame = OMX_FALSE;
-            } else {
                RbspParser rbsp_parser(m_rbspBytes,
                             (m_rbspBytes +
                         numBytesInRBSP));
                first_mb_in_slice = rbsp_parser.ue();
 
+            if (m_forceToStichNextNAL) {
+               isNewFrame = OMX_FALSE;
+               if(!first_mb_in_slice){
+                  isUpdateTimestamp = true;
+               }
+            } else {
                if ((!first_mb_in_slice) ||   /*(slice.prv_frame_num != slice.frame_num ) || */
                    ((m_prv_nalu.nal_ref_idc !=
                      nal_unit.nal_ref_idc)
@@ -461,7 +469,6 @@ bool H264_Utils::isNewFrame(OMX_IN OMX_U8 * buffer,
       }      // end of switch
    }         // end of if
    m_prv_nalu = nal_unit;
-   isforceToStichNextNAL = m_forceToStichNextNAL;
    QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
             "get_h264_nal_type - newFrame value %d\n", isNewFrame);
    return eRet;

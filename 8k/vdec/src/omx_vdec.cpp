@@ -5753,11 +5753,11 @@ OMX_ERRORTYPE omx_vdec::
    int push_cnt = 0;
    unsigned nPortIndex = buffer - ((OMX_BUFFERHEADERTYPE *) m_inp_mem_ptr);
    OMX_ERRORTYPE ret = OMX_ErrorNone;
+   bool isUpdatetimestamp = false;
    bool is_frame_no_error = true;
 
    if (nPortIndex < m_inp_buf_count) {
       OMX_BOOL isNewFrame = OMX_TRUE;
-      bool isforceToStichNextNAL = OMX_TRUE;
       if (buffer->nFilledLen > 0) {
          if (strncmp
              (m_vdec_cfg.kind, "OMX.qcom.video.decoder.avc",
@@ -5772,9 +5772,9 @@ OMX_ERRORTYPE omx_vdec::
                           m_vdec_cfg.
                           size_of_nal_length_field,
                           isNewFrame,
-                          isforceToStichNextNAL);
-            if((isforceToStichNextNAL) && (m_pcurrent_frame != NULL) && isNewFrame) {
-                 m_pcurrent_frame->nTimeStamp = buffer->nTimeStamp;
+                          isUpdatetimestamp);
+            if(isUpdatetimestamp && (m_pcurrent_frame != NULL)) {
+                m_pcurrent_frame->nTimeStamp = buffer->nTimeStamp;
             }
          } else
              if (strncmp
@@ -6067,7 +6067,7 @@ OMX_ERRORTYPE omx_vdec::
    unsigned nBufferIndex =
        m_pcurrent_frame - ((OMX_BUFFERHEADERTYPE *) m_inp_mem_ptr);
    OMX_BOOL isNewFrame = OMX_FALSE;
-   bool isforceToStichNextNAL = OMX_FALSE;
+   bool isUpdatetimestamp = false;
    bool is_frame_no_error = true;
 
    if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.avc", 26) == 0) {
@@ -6079,8 +6079,8 @@ OMX_ERRORTYPE omx_vdec::
                     m_vdec_cfg.
                     size_of_nal_length_field,
                     isNewFrame,
-                    isforceToStichNextNAL);
-      if((isforceToStichNextNAL) && (m_pcurrent_frame != NULL) && isNewFrame) {
+                    isUpdatetimestamp);
+      if(isUpdatetimestamp && (m_pcurrent_frame != NULL)) {
            m_pcurrent_frame->nTimeStamp = buffer->nTimeStamp;
       }
    } else if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.vc1", 26) ==

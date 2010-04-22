@@ -183,7 +183,7 @@ class H264_Utils {
          OMX_IN OMX_U32 bitstream_length,
          OMX_IN OMX_U32 size_of_nal_length_field,
          OMX_OUT OMX_BOOL & isNewFrame,
-         bool & isforceToStichNextNAL);
+         bool & isUpdateTimestamp);
    bool parseHeader(uint8 * encodedBytes,
           uint32 totalBytes,
           uint32 nal_len,
