@@ -3465,7 +3465,7 @@ OMX_ERRORTYPE Venc::allocate_buffer(OMX_IN OMX_HANDLETYPE hComponent,
       {
 
         result = pmem_alloc(&pPrivateData->sPmemInfo,
-            m_sOutPortDef.nBufferSize, VENC_PMEM_SMI);
+            m_sOutPortDef.nBufferSize, VENC_PMEM_EBI1);
         if (result != OMX_ErrorNone) {
           QC_OMX_MSG_ERROR("Failed to allocate pmem buffer");
         }
