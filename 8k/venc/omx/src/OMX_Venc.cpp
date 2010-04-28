@@ -3465,7 +3465,7 @@ OMX_ERRORTYPE Venc::allocate_buffer(OMX_IN OMX_HANDLETYPE hComponent,
       {
 
         result = pmem_alloc(&pPrivateData->sPmemInfo,
-            m_sOutPortDef.nBufferSize, VENC_PMEM_EBI1);
+            m_sOutPortDef.nBufferSize, VENC_PMEM_SMI);
         if (result != OMX_ErrorNone) {
           QC_OMX_MSG_ERROR("Failed to allocate pmem buffer");
         }
@@ -4405,6 +4405,7 @@ void Venc::process_empty_buffer(OMX_BUFFERHEADERTYPE* pBufferHdr)
    pParam = reinterpret_cast<OMX_QCOM_PLATFORM_PRIVATE_PMEM_INFO *>(pBufferHdr->pPlatformPrivate);
    pmem_input.fd = pParam->pmem_fd;
    pmem_input.offset = pParam->offset;
+   pmem_input.src = VENC_PMEM_SMI;
    pmem_input.size =  m_sInPortDef.nBufferSize;
    input.ptr_buffer = (unsigned char *)&pmem_input;
 
@@ -4472,6 +4473,9 @@ void Venc::process_fill_buffer(OMX_BUFFERHEADERTYPE* pBufferHdr)
       pParam = reinterpret_cast<OMX_QCOM_PLATFORM_PRIVATE_PMEM_INFO *>(pBufferHdr->pPlatformPrivate);
       pmem_output.fd = pParam->pmem_fd;
       pmem_output.offset = pParam->offset;
+      /*We should enhance OMX_QCOM_PLATFORM_PRIVATE_PMEM_INFO to store
+       * pmem source info. Hardcoding for now.*/
+      pmem_output.src = VENC_PMEM_SMI;
       pmem_output.size =  m_sOutPortDef.nBufferSize;
       output.ptr_buffer = (unsigned char *)&pmem_output;
 
