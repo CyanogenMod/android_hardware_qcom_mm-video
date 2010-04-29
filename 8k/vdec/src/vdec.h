@@ -328,6 +328,7 @@ extern "C" {
       void *thread_specific_info;
       Vdec_BufferRequirements decReq1;
       Vdec_BufferRequirements decReq2;
+      boolean is_commit_memory;
    };
 
 /**

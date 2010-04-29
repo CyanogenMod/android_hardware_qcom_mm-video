@@ -291,9 +291,12 @@ Vdec_ReturnType vdec_close(struct VDecoder *dec)
       pInputFile=NULL;
    }
 #endif
+   dec->is_commit_memory = 0;
    adsp_close((struct adsp_module *)dec->adsp_module);
    free(dec->ctxt->inputBuffer);
    free(dec->ctxt->outputBuffer);
+   dec->ctxt->outputBuffer =NULL;
+   dec->ctxt->inputBuffer =NULL;
    if (-1 == sem_destroy(&pthread_info->flush_sem)) {
       QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                "[vdec_close] - sem_destroy failed %d\n", errno);
@@ -407,9 +410,9 @@ Vdec_ReturnType vdec_commit_memory(struct VDecoder * dec)
    int r;
    int pmemid, pmembuf_cnt;
    void *pmem_buf;
-   int bufnum, bufsize, total_out_size, extraSize = 0, total_set_buffers =
+   int bufnum, bufsize, total_out_size = 0, extraSize = 0, total_set_buffers =
        0;
-   int bufin_size, bufout_size, bufdec1_size, bufdec2_size, in_offset,
+   int bufin_size, bufout_size = 0, bufdec1_size, bufdec2_size, in_offset,
        out_offset, dec1_offset, total_size, dec2_offset;
    struct adsp_buffer_info adsp_buf_info;
    struct pmem arena;
@@ -452,15 +455,12 @@ Vdec_ReturnType vdec_commit_memory(struct VDecoder * dec)
       dec->ctxt->nOutBufAllocLen =
           dec->ctxt->outputReq.bufferSize + extraSize;
       //dec->ctxt->nOutBufAllocLen = dec->ctxt->outputReq.bufferSize ;
-      dec->ctxt->numOutputBuffers =
-          dec->ctxt->outputReq.numMinBuffers;
       bufout_size =
           Q6_VDEC_PAGE_ALIGN(dec->ctxt->outputReq.bufferSize +
                    extraSize);
       total_out_size =
           Q6_VDEC_PAGE_ALIGN(bufout_size *
                    dec->ctxt->outputReq.numMinBuffers);
-
       QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                  "vdec: Commit: out buf size %d and tot out size %d\n",  bufout_size, total_out_size);
       bufdec1_size = 0;
@@ -532,18 +532,6 @@ Vdec_ReturnType vdec_commit_memory(struct VDecoder * dec)
          return VDEC_EFAILED;
       }
 
-      dec->ctxt->outputBuffer =
-          (struct vdec_frame *)malloc(sizeof(struct vdec_frame) *
-                  dec->ctxt->outputReq.
-                  numMinBuffers);
-
-      if (NULL == dec->ctxt->outputBuffer) {
-         QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
-                 "vdec: failed to allocate output buffers\n");
-         free(dec->ctxt->inputBuffer);
-         return VDEC_EFAILED;
-      }
-
       dec->pmem_buffers = 1;
 
       dec->arena =
@@ -553,8 +541,29 @@ Vdec_ReturnType vdec_commit_memory(struct VDecoder * dec)
          QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
                  "vdec: failed to allocate output buffers\n");
          free(dec->ctxt->inputBuffer);
-         free(dec->ctxt->outputBuffer);
          return VDEC_EFAILED;
+      }
+       extraSize = getExtraDataSize();
+
+      if(NULL == dec->ctxt->outputBuffer ) {
+          dec->ctxt->outputBuffer =
+             (struct vdec_frame *)malloc(sizeof(struct vdec_frame) *
+                     dec->ctxt->outputReq.
+                     numMinBuffers);
+
+         if (NULL == dec->ctxt->outputBuffer) {
+         QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+                 "vdec: failed to allocate output buffers\n");
+         free(dec->ctxt->inputBuffer);
+            free(dec->arena);
+         return VDEC_EFAILED;
+      }
+          bufout_size =
+             Q6_VDEC_PAGE_ALIGN(dec->ctxt->outputReq.bufferSize +
+                   extraSize);
+          total_out_size =
+             Q6_VDEC_PAGE_ALIGN(bufout_size *
+                   dec->ctxt->outputReq.numMinBuffers);
       }
 
       bufin_size =
@@ -563,19 +572,11 @@ Vdec_ReturnType vdec_commit_memory(struct VDecoder * dec)
       pmembuf_cnt = 0;
       dec->ctxt->numInputBuffers = dec->ctxt->inputReq.numMinBuffers;
 
-      extraSize = getExtraDataSize();
 
       dec->ctxt->nOutBufAllocLen =
           dec->ctxt->outputReq.bufferSize + extraSize;
       //dec->ctxt->nOutBufAllocLen = dec->ctxt->outputReq.bufferSize ;
-      dec->ctxt->numOutputBuffers =
-          dec->ctxt->outputReq.numMinBuffers;
-      bufout_size =
-          Q6_VDEC_PAGE_ALIGN(dec->ctxt->outputReq.bufferSize +
-                   extraSize);
-      total_out_size =
-          Q6_VDEC_PAGE_ALIGN(bufout_size *
-                   dec->ctxt->outputReq.numMinBuffers);
+    
       QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                  "vdec: Commit: out buf size %d and tot out size %d\n",  bufout_size, total_out_size);
 
@@ -648,17 +649,20 @@ Vdec_ReturnType vdec_commit_memory(struct VDecoder * dec)
    for (n = 0; n < dec->ctxt->outputReq.numMinBuffers; n++) {
       struct vdec_frame *fr = NULL;
       fr = dec->ctxt->outputBuffer + n;
+      if(bufout_size > 0) {
       fr->buffer.pmem_id = dec->arena[pmembuf_cnt].fd;
       fr->buffer.pmem_offset = off;
       fr->buffer.base = ((byte *) dec->arena[pmembuf_cnt].data) + off;
       fr->buffer.state = VDEC_BUFFER_WITH_APP_FLUSHED;
+         off += bufout_size;
+      }
       QTV_MSG_PRIO4(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW,
                "      output[%d] base=%p off=0x%08x id=%d\n", n,
                fr->buffer.base, fr->buffer.pmem_offset,
                fr->buffer.pmem_id);
 
-      adsp_buf_info.buf.pmem_id = dec->arena[pmembuf_cnt].fd;
-      adsp_buf_info.buf.offset = off;
+      adsp_buf_info.buf.pmem_id = fr->buffer.pmem_id;
+      adsp_buf_info.buf.offset = fr->buffer.pmem_offset;
       adsp_buf_info.buf.size = dec->ctxt->outputReq.bufferSize;
       adsp_buf_info.buf_type = ADSP_BUFFER_TYPE_OUTPUT;
       adsp_buf_info.numbuf = 1;
@@ -670,7 +674,6 @@ Vdec_ReturnType vdec_commit_memory(struct VDecoder * dec)
                  "vdec: failed to set adsp buffers");
          return VDEC_EFAILED;
       }
-      off += bufout_size;
    }
 
    if (dec->decReq1.numMinBuffers) {
@@ -703,6 +706,7 @@ Vdec_ReturnType vdec_commit_memory(struct VDecoder * dec)
          return VDEC_EFAILED;
       }
    }
+   dec->is_commit_memory = 1;
    return VDEC_SUCCESS;
 }
 struct VDecoder *vdec_open(struct vdec_context *ctxt)
@@ -737,6 +741,7 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
 
    dec->thread_specific_info = (void *)pthread_info;
    dec->ctxt = ctxt;
+   dec->is_commit_memory = 0;
 
    openinfo.frame_done = vdec_frame_cb_handler;
    openinfo.buffer_done = vdec_reuse_input_cb_handler;
@@ -849,6 +854,8 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
             "vdec_open ointernal 2 numbuf= %d and bufsize= %d\n",
             dec->decReq2.numMinBuffers,
             dec->decReq2.bufferSize);
+   dec->ctxt->numOutputBuffers =
+          dec->ctxt->outputReq.numMinBuffers;
 
 #if LOG_YUV_FRAMES
 #ifdef T_WINNT
@@ -944,6 +951,7 @@ Vdec_ReturnType vdec_post_input_buffer(struct VDecoder * dec,
    pthread_info = (struct Vdec_pthread_info *)dec->thread_specific_info;
 
    if (is_pmem == 0) {
+      if (dec->ctxt->inputBuffer) {
       for (i = 0; i < dec->ctxt->inputReq.numMinBuffers; i++) {
          if (dec->ctxt->inputBuffer[i].state ==
              VDEC_BUFFER_WITH_VDEC_CORE) {
@@ -958,6 +966,7 @@ Vdec_ReturnType vdec_post_input_buffer(struct VDecoder * dec,
             buf_index = i;
             break;
          }
+      }
       }
    } else {
       for (i = 0; i < dec->ctxt->numInputBuffers; i++) {
@@ -1163,10 +1172,10 @@ Vdec_ReturnType vdec_flush_port(struct VDecoder * dec, int *nFlushedFrames,
    int i = 0;
    Vdec_ReturnType retVal=VDEC_SUCCESS;
    QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW, "vdec: flush \n");
-   if (NULL == dec || NULL == dec->ctxt) {
-      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
-               "vdec: error: encountered NULL parameter vdec: 0x%x \n",
-               (unsigned int)dec);
+   if (NULL == dec || NULL == dec->ctxt || !dec->is_commit_memory) {
+      QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+               "vdec: error: encountered NULL parameter vdec: 0x%x or commit memroy not called %d \n",
+               (unsigned int)dec, dec->is_commit_memory);
       return VDEC_EFAILED;
    }
    pthread_info = (struct Vdec_pthread_info *)dec->thread_specific_info;

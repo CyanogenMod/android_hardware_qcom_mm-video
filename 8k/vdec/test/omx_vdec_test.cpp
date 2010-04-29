@@ -52,6 +52,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "qtv_msg.h"
 extern "C" {
 #include "queue.h"
+#include "pmem.h"
 }
 
 
@@ -141,7 +142,15 @@ typedef enum {
   FREE_HANDLE_AT_PAUSE
 } freeHandle_test;
 
+struct use_egl_id {
+    int pmem_fd;
+    int offset;
+};
+
 static int (*Read_Buffer)(OMX_BUFFERHEADERTYPE  *pBufHdr );
+
+struct use_egl_id *egl_id = NULL;
+int is_use_egl_image = 0;
 
 FILE * inputBufferFile;
 FILE * outputBufferFile;
@@ -240,6 +249,11 @@ static OMX_ERRORTYPE Allocate_Buffer ( OMX_COMPONENTTYPE *dec_handle,
                                        OMX_BUFFERHEADERTYPE  ***pBufHdrs,
                                        OMX_U32 nPortIndex,
                                        long bufCntMin, long bufSize);
+static OMX_ERRORTYPE Use_EGL_Buffer ( OMX_COMPONENTTYPE *dec_handle,
+                                       OMX_BUFFERHEADERTYPE  ***pBufHdrs,
+                                       OMX_U32 nPortIndex,
+                                       long bufCntMin, long bufSize,
+                                      struct use_egl_id **egl);
 
 
 static OMX_ERRORTYPE EventHandler(OMX_IN OMX_HANDLETYPE hComponent,
@@ -1158,6 +1172,9 @@ int Init_Decoder()
 
     QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,
                  "Set parameter immediately followed by getparameter");
+     if(is_use_egl_image) {
+        portFmt.format.video.pNativeWindow = (void *)0xDEADBEAF;
+    }
     omxresult = OMX_SetParameter(dec_handle,
                                OMX_IndexParamPortDefinition,
                                &portFmt);
@@ -1351,6 +1368,9 @@ int Play_Decoder()
     bufCnt = 0;
     portFmt.format.video.nFrameHeight = height;
     portFmt.format.video.nFrameWidth  = width;
+    if(is_use_egl_image) {
+        portFmt.format.video.pNativeWindow = (void *)0xDEADBEAF;
+    }
     OMX_SetParameter(dec_handle,OMX_IndexParamPortDefinition,
                                                        (OMX_PTR)&portFmt);
     OMX_GetParameter(dec_handle,OMX_IndexParamPortDefinition,
@@ -1396,9 +1416,16 @@ int Play_Decoder()
         return -1;
     }
 
+    if(!is_use_egl_image) {
     /* Allocate buffer on decoder's o/p port */
     error = Allocate_Buffer(dec_handle, &pOutYUVBufHdrs, portFmt.nPortIndex,
                             portFmt.nBufferCountMin, portFmt.nBufferSize);
+    }
+    else {
+        error = Use_EGL_Buffer(dec_handle, &pOutYUVBufHdrs, portFmt.nPortIndex,
+                                portFmt.nBufferCountMin, portFmt.nBufferSize, &egl_id);
+    }
+
     if (error != OMX_ErrorNone) {
         QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,
                      "Error - OMX_AllocateBuffer Output buffer error\n");
@@ -1560,6 +1587,17 @@ int Play_Decoder()
         // Free output Buffer
         for(bufCnt=0; bufCnt < portFmt.nBufferCountMin; ++bufCnt) {
             OMX_FreeBuffer(dec_handle, 1, pOutYUVBufHdrs[bufCnt]);
+            if(is_use_egl_image && egl_id) {
+                struct pmem arena;
+                arena.fd = egl_id[bufCnt].pmem_fd;
+                arena.size = pOutYUVBufHdrs[bufCnt]->nAllocLen;
+                pmem_free(&arena);
+            }
+        }
+
+        if(egl_id) {
+            free(egl_id);
+            egl_id = NULL;
         }
 
         // wait for Disable event to come back
@@ -1589,8 +1627,16 @@ int Play_Decoder()
             return -1;
         }
 
+         if(!is_use_egl_image) {
+            /* Allocate buffer on decoder's o/p port */
         error = Allocate_Buffer(dec_handle, &pOutYUVBufHdrs, portFmt.nPortIndex,
-                                portFmt.nBufferCountActual, portFmt.nBufferSize);
+                                portFmt.nBufferCountMin, portFmt.nBufferSize);
+         }
+         else {
+            error = Use_EGL_Buffer(dec_handle, &pOutYUVBufHdrs, portFmt.nPortIndex,
+                                portFmt.nBufferCountMin, portFmt.nBufferSize, &egl_id);
+         }
+
         if (error != OMX_ErrorNone) {
             QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,
                          "Error - OMX_AllocateBuffer Output buffer error\n");
@@ -1691,6 +1737,42 @@ static OMX_ERRORTYPE Allocate_Buffer ( OMX_COMPONENTTYPE *dec_handle,
     return error;
 }
 
+static OMX_ERRORTYPE Use_EGL_Buffer ( OMX_COMPONENTTYPE *dec_handle,
+                                       OMX_BUFFERHEADERTYPE  ***pBufHdrs,
+                                       OMX_U32 nPortIndex,
+                                       long bufCntMin, long bufSize,
+                                      struct use_egl_id **egl)
+{
+    QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,"Inside %s \n", __FUNCTION__);
+    OMX_ERRORTYPE error=OMX_ErrorNone;
+    long bufCnt=0;
+    struct use_egl_id *egl_info;
+    struct pmem arena;
+
+    QTV_MSG_PRIO2(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,"pBufHdrs = %x,bufCntMin = %d\n", pBufHdrs, bufCntMin);
+    *pBufHdrs= (OMX_BUFFERHEADERTYPE **)
+                   malloc(sizeof(OMX_BUFFERHEADERTYPE)*bufCntMin);
+    *egl = (struct use_egl_id *)
+                   malloc(sizeof(struct use_egl_id) * bufCntMin);
+
+    for(bufCnt=0; bufCnt < bufCntMin; ++bufCnt) {
+        egl_info = *egl+bufCnt;
+        if (pmem_alloc (&arena, bufSize))
+        {
+           QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,"OMX_Use_EGL_Buffer No pmem %d \n", bufSize);
+           return OMX_ErrorInsufficientResources;
+        }
+        egl_info->pmem_fd = arena.fd;
+        egl_info->offset =  0;
+
+        QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,"OMX_AllocateBuffer No %d \n", bufCnt);
+        error = OMX_UseEGLImage(dec_handle, &((*pBufHdrs)[bufCnt]),
+                                   nPortIndex, NULL, (void *) egl_info);
+    }
+
+    return error;
+}
+
 static void do_freeHandle_and_clean_up(bool isDueToError)
 {
     int bufCnt = 0;
@@ -1703,6 +1785,16 @@ static void do_freeHandle_and_clean_up(bool isDueToError)
     for(bufCnt=0; bufCnt < portFmt.nBufferCountMin; ++bufCnt)
     {
         OMX_FreeBuffer(dec_handle, 1, pOutYUVBufHdrs[bufCnt]);
+        if(is_use_egl_image && egl_id) {
+                struct pmem arena;
+                arena.fd = egl_id[bufCnt].pmem_fd;
+                arena.size = pOutYUVBufHdrs[bufCnt]->nAllocLen;
+                pmem_free(&arena);
+            }
+    }
+    if(egl_id) {
+        free(egl_id);
+        egl_id = NULL;
     }
 
     QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,"[OMX Vdec Test] - Free handle decoder\n");
@@ -2241,6 +2333,7 @@ void render_fb(struct OMX_BUFFERHEADERTYPE *pBufHdr)
     OMX_QCOM_EXTRADATA_CODEC_DATA *pExtraCodecData = 0;
     OMX_QCOM_PLATFORM_PRIVATE_PMEM_INFO *pPMEMInfo = NULL;
     unsigned int destx, desty,destW, destH;
+    struct use_egl_id *egl_info = NULL;
 #ifdef _ANDROID_
     MemoryHeapBase *vheap = NULL;
 #endif
@@ -2261,9 +2354,15 @@ void render_fb(struct OMX_BUFFERHEADERTYPE *pBufHdr)
        return;
     }
 
+    if(is_use_egl_image) {
+        egl_info = (struct use_egl_id *)pBufHdr->pBuffer;
+    }
+
     img.list.count = 1;
     e = &img.list.req[0];
 
+
+    if(!is_use_egl_image) {
     addr = (unsigned int)(pBufHdr->pBuffer + pBufHdr->nFilledLen);
     // align to a 4 byte boundary
     addr = (addr + 3) & (~3);
@@ -2308,6 +2407,7 @@ void render_fb(struct OMX_BUFFERHEADERTYPE *pBufHdr)
                   "Extra Data FrameDimension CropWidth %d CropHeight %d\n",pExtraFrameDimension->nActualWidth,pExtraFrameDimension->nActualHeight);
     }
 
+    }
     if (pBufHdr->nOffset)
        QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,"pBufHdr->nOffset = %d \n",pBufHdr->nOffset);
 
@@ -2336,12 +2436,18 @@ void render_fb(struct OMX_BUFFERHEADERTYPE *pBufHdr)
     }
 
     e->src.format = MDP_Y_CBCR_H2V2;
+    if(is_use_egl_image) {
+      e->src.offset = egl_info->offset;
+      e->src.memory_id = egl_info->pmem_fd;
+    }
+    else {
     e->src.offset = pPMEMInfo->offset;
 #ifdef _ANDROID_
     e->src.memory_id = vheap->getHeapID();
 #else
     e->src.memory_id = pPMEMInfo->pmem_fd;
 #endif
+    }
 
     QTV_MSG_PRIO2(QTVDIAG_GENERAL,QTVDIAG_PRIO_ERROR,
                   "pmemOffset %d pmemID %d\n",e->src.offset,e->src.memory_id);
@@ -2355,7 +2461,7 @@ void render_fb(struct OMX_BUFFERHEADERTYPE *pBufHdr)
     e->transp_mask = 0xffffffff;
     QTV_MSG_PRIO1(QTVDIAG_GENERAL,QTVDIAG_PRIO_HIGH,
                   "Frame interlace type %d!\n", pExtraFrameInfo->interlaceType);
-    if(pExtraFrameInfo->interlaceType != OMX_QCOM_InterlaceFrameProgressive)
+    if(pExtraFrameInfo && pExtraFrameInfo->interlaceType != OMX_QCOM_InterlaceFrameProgressive)
     {
        QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_HIGH,
                   "Intrelaced Frame!\n");

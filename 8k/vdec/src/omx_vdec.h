@@ -441,8 +441,17 @@ class omx_vdec:public qc_omx_component, public omx_vdec_inpbuf {
                 OMX_COMMANDTYPE cmd,
                 OMX_U32 param1, OMX_PTR cmdData);
 
-   inline unsigned get_output_buffer_size() {
-      return (((m_port_height * m_port_width) / 2) * 3);
+   inline unsigned int get_output_buffer_size() {
+       OMX_U32 buffer_size, chroma_height, chroma_width;
+       if (m_color_format == QOMX_COLOR_FormatYVU420PackedSemiPlanar32m4ka) {
+         buffer_size = (m_port_height * m_port_width + 4095) & ~4095;
+         chroma_height = ((m_port_height >> 1) + 31) & ~31;
+         chroma_width = 2 * ((m_port_width >> 1) + 31) & ~31;
+         buffer_size += (chroma_height * chroma_width) + get_extradata_size();
+       } else {
+          buffer_size = m_port_height * m_port_width * 3/2  + get_extradata_size();
+       }
+       return buffer_size;
    } inline void omx_vdec_set_use_buf_flg() {
       m_is_use_buffer = true;
    }
@@ -451,6 +460,15 @@ class omx_vdec:public qc_omx_component, public omx_vdec_inpbuf {
    }
    inline bool omx_vdec_get_use_buf_flg() {
       return m_is_use_buffer;
+   }
+   inline void omx_vdec_set_use_egl_buf_flg() {
+      m_is_use_egl_buffer = true;
+   }
+   inline void omx_vdec_reset_use_elg_buf_flg() {
+      m_is_use_egl_buffer = false;
+   }
+   inline bool omx_vdec_get_use_egl_buf_flg() {
+      return m_is_use_egl_buffer;
    }
    inline void omx_vdec_set_input_use_buf_flg() {
       m_is_input_use_buffer = true;
@@ -500,6 +518,11 @@ class omx_vdec:public qc_omx_component, public omx_vdec_inpbuf {
                      OMX_IN OMX_BUFFERHEADERTYPE *
                      source,
                      OMX_INOUT bool * isPartialFrame);
+   OMX_ERRORTYPE use_egl_output_buffer(OMX_IN OMX_HANDLETYPE hComp,
+                  OMX_INOUT OMX_BUFFERHEADERTYPE **
+                  bufferHdr, OMX_IN OMX_U32 port,
+                  OMX_IN OMX_PTR appData,
+                  OMX_IN void *eglImage);
 
    int get_extradata_size(void)
    {
@@ -658,6 +681,7 @@ class omx_vdec:public qc_omx_component, public omx_vdec_inpbuf {
    // is USE Buffer in use
    bool m_is_use_buffer;
    bool m_is_input_use_buffer;
+   bool m_is_use_egl_buffer;
    //bool                  m_is_use_pmem_buffer;
    // EOS notify pending to the IL client
    bool m_bEoSNotifyPending;
@@ -703,6 +727,7 @@ class omx_vdec:public qc_omx_component, public omx_vdec_inpbuf {
     omx_mp4_divX_buffer_info            m_divX_buffer_info;
     uint32 m_codec_format;
     uint32 m_codec_profile;
+    OMX_NATIVE_WINDOWTYPE m_display_id;
 };
 
 #endif // __OMX_VDEC_H__

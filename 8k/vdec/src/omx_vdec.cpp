@@ -46,6 +46,11 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <fcntl.h>
 #include <unistd.h>
 
+#ifdef USE_EGL_IMAGE_GPU
+#include <EGL/egl.h>
+#include <EGL/eglQCOM.h>
+#endif
+
 #ifdef _ANDROID_
 #include "cutils/properties.h"
 #endif //_ANDROID_
@@ -70,6 +75,9 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
         ((uint32)(uint8)(ch1) << 8) | \
         ((uint32)(uint8)(ch2) << 16) | \
         ((uint32)(uint8)(ch3) << 24 ))
+#define EGL_BUFFER_HANDLE_QCOM 0x4F00
+#define EGL_BUFFER_OFFSET_QCOM 0x4F01
+
 
 genericQueue::genericQueue()
 {
@@ -305,7 +313,9 @@ m_b_display_order(false),
 m_pPrevFrame(NULL),
 m_codec_format(0),
 m_codec_profile(0),
-m_bInvalidState(false)
+m_bInvalidState(false),
+m_display_id(NULL),
+m_is_use_egl_buffer(false)
 {
    /* Assumption is that , to begin with , we have all the frames with client */
    memset(m_out_flags, 0x00, (OMX_CORE_NUM_OUTPUT_BUFFERS + 7) / 8);
@@ -314,6 +324,8 @@ m_bInvalidState(false)
    memset(&m_cb, 0, sizeof(m_cb));
    memset(&m_vdec_cfg, 0, sizeof(m_vdec_cfg));
    m_vdec_cfg.vdec_fd = -1;
+   m_vdec_cfg.inputBuffer = NULL;
+   m_vdec_cfg.outputBuffer = NULL;
    memset(&m_frame_info, 0, sizeof(m_frame_info));
    memset(m_out_bm_count, 0x0, (OMX_CORE_NUM_OUTPUT_BUFFERS + 7) / 8);
 
@@ -541,7 +553,11 @@ void omx_vdec::frame_done_cb(struct vdec_context *ctxt,
                         "\n **** Flushed Frame-%d **** \n",
                         i);
             } else {
+               if(!pThis->omx_vdec_get_use_egl_buf_flg()) {
                pThis->fill_extradata(pBufHdr, frame);
+            }
+               else
+                 pBufHdr->nFilledLen = pThis->get_output_buffer_size();
             }
 
             // If the decoder provides frame done for last frame then set the eos flag.
@@ -2281,12 +2297,12 @@ OMX_ERRORTYPE omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE hComp,
             }
             extraDataSize = get_extradata_size();
             if (m_color_format == QOMX_COLOR_FormatYVU420PackedSemiPlanar32m4ka) {
-               portDefn->nBufferSize = (m_height * m_width + 4095) & ~4095;
-               chroma_height = ((m_height >> 1) + 31) & ~31;
-               chroma_width = 2 * ((m_width >> 1) + 31) & ~31;
+               portDefn->nBufferSize = (m_port_width * m_port_height + 4095) & ~4095;
+               chroma_height = ((m_port_height >> 1) + 31) & ~31;
+               chroma_width = 2 * ((m_port_width >> 1) + 31) & ~31;
                portDefn->nBufferSize += (chroma_height * chroma_width) + extraDataSize;
             } else {
-               portDefn->nBufferSize = m_height * m_width * 3/2  + extraDataSize;
+               portDefn->nBufferSize = m_port_height * m_port_width * 3/2  + extraDataSize;
             }
             portDefn->format.video.eColorFormat =
                 m_color_format;
@@ -2767,6 +2783,10 @@ OMX_ERRORTYPE omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE hComp,
                         nBufferCountActual);
                eRet = OMX_ErrorBadParameter;
             }
+            /* Save the DisplayID to be used in useEGLImage api to query the
+               pmem fd and offset from GPU client.
+            */
+            m_display_id = portDefn->format.video.pNativeWindow;
 
          } else if (OMX_DirInput == portDefn->eDir) {
             if (m_height !=
@@ -3957,6 +3977,18 @@ OMX_ERRORTYPE omx_vdec::use_buffer(OMX_IN OMX_HANDLETYPE hComp,
             && m_out_bPopulated) {
          if (BITMASK_PRESENT
              (m_flags, OMX_COMPONENT_OUTPUT_ENABLE_PENDING)) {
+             if (m_event_port_settings_sent) {
+                  if (VDEC_SUCCESS != vdec_commit_memory(m_vdec)) {
+                  QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+                                "ERROR!!! vdec_commit_memory failed\n");
+                   m_bInvalidState = true;
+                   m_cb.EventHandler(&m_cmp, m_app_data,
+                          OMX_EventError,
+                          OMX_ErrorInsufficientResources, 0,
+                          NULL);
+                   eRet = OMX_ErrorInsufficientResources;
+                 }
+             }
             // Populate the Buffer Headers
             omx_vdec_get_out_buf_hdrs();
             // Populate Use Buffer Headers
@@ -4618,6 +4650,18 @@ OMX_ERRORTYPE omx_vdec::allocate_buffer(OMX_IN OMX_HANDLETYPE hComp,
             && m_out_bPopulated) {
          QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                  "output allocate done");
+          if (m_event_port_settings_sent) {
+                  if (VDEC_SUCCESS != vdec_commit_memory(m_vdec)) {
+                  QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+                                "ERROR!!! vdec_commit_memory failed\n");
+                   m_bInvalidState = true;
+                   m_cb.EventHandler(&m_cmp, m_app_data,
+                          OMX_EventError,
+                          OMX_ErrorInsufficientResources, 0,
+                          NULL);
+                   eRet = OMX_ErrorInsufficientResources;
+                 }
+            }
          if (BITMASK_PRESENT
              (m_flags, OMX_COMPONENT_OUTPUT_ENABLE_PENDING)) {
 
@@ -4908,6 +4952,11 @@ OMX_ERRORTYPE omx_vdec::free_buffer(OMX_IN OMX_HANDLETYPE hComp,
          if (m_vdec) {
             m_out_buf_count = m_vdec_cfg.numOutputBuffers;
             omx_vdec_free_output_port_memory();
+         }
+         if(omx_vdec_get_use_egl_buf_flg()) {
+            QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                 "Resetting use_egl_buf flag\n");
+          omx_vdec_reset_use_elg_buf_flg();
          }
          post_event(OMX_CommandPortDisable,
                OMX_CORE_OUTPUT_PORT_INDEX,
@@ -5223,6 +5272,16 @@ OMX_ERRORTYPE omx_vdec::
              && (!m_bInterlaced)) {
             QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW,
                     "Port setting Changed is not needed\n");
+             if (VDEC_SUCCESS != vdec_commit_memory(m_vdec)) {
+                  QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+                                "ERROR!!! vdec_commit_memory failed\n");
+                   m_bInvalidState = true;
+                   m_cb.EventHandler(&m_cmp, m_app_data,
+                          OMX_EventError,
+                          OMX_ErrorInsufficientResources, 0,
+                          NULL);
+                  return OMX_ErrorInsufficientResources;
+             }
 
             // Populate Output Buffer Headers
             omx_vdec_get_out_buf_hdrs();
@@ -6695,7 +6754,224 @@ OMX_ERRORTYPE omx_vdec::component_deinit(OMX_IN OMX_HANDLETYPE hComp) {
 
    return OMX_ErrorNone;
 }
+/* ======================================================================
+FUNCTION
+  omx_vdec::use_egl_output_buffer
 
+DESCRIPTION
+  OMX Use EGL Image method implementation <TBD>.
+
+PARAMETERS
+  <TBD>.
+
+RETURN VALUE
+  Not Implemented error.
+
+========================================================================== */
+
+OMX_ERRORTYPE omx_vdec::use_egl_output_buffer(OMX_IN OMX_HANDLETYPE hComp,
+                  OMX_INOUT OMX_BUFFERHEADERTYPE **
+                  bufferHdr, OMX_IN OMX_U32 port,
+                  OMX_IN OMX_PTR appData,
+                  OMX_IN void *eglImage)
+{
+   OMX_ERRORTYPE eRet = OMX_ErrorNone;
+   OMX_BUFFERHEADERTYPE *bufHdr;   // buffer header
+   unsigned i;      // Temporary counter
+#ifdef USE_EGL_IMAGE_GPU
+   PFNEGLQUERYIMAGEQUALCOMMPROC egl_queryfunc;
+   EGLint fd = -1, offset = 0;
+#else
+   int fd = -1, offset = 0;
+#endif
+   vdec_frame *output_buf;
+#ifdef USE_EGL_IMAGE_GPU
+   if(m_display_id == NULL) {
+        QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+               "Display ID is not set by IL client and EGL image can't be used with out this \n");
+        return OMX_ErrorInsufficientResources;
+
+   }
+
+   egl_queryfunc = (PFNEGLQUERYIMAGEQUALCOMMPROC)
+     eglGetProcAddress("eglQueryImageKHR");
+
+   egl_queryfunc(m_display_id, eglImage, EGL_BUFFER_HANDLE_QCOM,
+            &fd);
+
+    egl_queryfunc(m_display_id, eglImage, EGL_BUFFER_OFFSET_QCOM,
+          &offset);
+#else //with OMX test app
+    struct temp_egl {
+        int pmem_fd;
+        int offset;
+    };
+    struct temp_egl *temp_egl_id;
+    temp_egl_id = (struct temp_egl *)eglImage;
+    fd = temp_egl_id->pmem_fd;
+    offset = temp_egl_id->offset;
+#endif
+
+   if (fd < 0) {
+        QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+               "Improper pmem fd by EGL clinet %d  \n",fd);
+        return OMX_ErrorInsufficientResources;
+   }
+   if (!m_out_mem_ptr) {
+      int nBufHdrSize = 0;
+      int nPlatformEntrySize = 0;
+      int nPlatformListSize = 0;
+      int nPMEMInfoSize = 0;
+      OMX_QCOM_PLATFORM_PRIVATE_LIST *pPlatformList;
+      OMX_QCOM_PLATFORM_PRIVATE_ENTRY *pPlatformEntry;
+      OMX_QCOM_PLATFORM_PRIVATE_PMEM_INFO *pPMEMInfo;
+
+      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+               "Ist Use Output Buffer(%d)\n", m_out_buf_count);
+      nBufHdrSize = m_out_buf_count * sizeof(OMX_BUFFERHEADERTYPE);
+      nPMEMInfoSize = m_out_buf_count *
+          sizeof(OMX_QCOM_PLATFORM_PRIVATE_PMEM_INFO);
+      nPlatformListSize = m_out_buf_count *
+          sizeof(OMX_QCOM_PLATFORM_PRIVATE_LIST);
+      nPlatformEntrySize = m_out_buf_count *
+          sizeof(OMX_QCOM_PLATFORM_PRIVATE_ENTRY);
+      //m_out_bm_count     = BITMASK_SIZE(m_out_buf_count);
+      QTV_MSG_PRIO4(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+               "UOB::TotalBufHdr %d BufHdrSize %d PMEM %d PL %d\n",
+               nBufHdrSize, sizeof(OMX_BUFFERHEADERTYPE),
+               nPMEMInfoSize, nPlatformListSize);
+      QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+               "UOB::PE %d bmSize %d \n", nPlatformEntrySize,
+               m_out_bm_count);
+
+      /*
+       * Memory for output side involves the following:
+       * 1. Array of Buffer Headers
+       * 2. Platform specific information List
+       * 3. Platform specific Entry List
+       * 4. PMem Information entries
+       * 5. Bitmask array to hold the buffer allocation details
+       * In order to minimize the memory management entire allocation
+       * is done in one step.
+       */
+      /*m_out_mem_ptr = (char *)calloc(nBufHdrSize +
+         nPlatformListSize +
+         nPlatformEntrySize +
+         nPMEMInfoSize +m_out_bm_count, 1); */
+      // Alloc mem for out buffer headers
+      m_out_mem_ptr = (char *)calloc(nBufHdrSize, 1);
+      // Alloc mem for platform specific info
+      char *pPtr = NULL;
+      pPtr = (char *)calloc(nPlatformListSize + nPlatformEntrySize +
+                  nPMEMInfoSize, 1);
+       m_vdec_cfg.outputBuffer =
+          (struct vdec_frame *)malloc(sizeof(struct vdec_frame) *
+                  m_out_buf_count);
+      if (m_out_mem_ptr && pPtr &&  m_vdec_cfg.outputBuffer) {
+         bufHdr = (OMX_BUFFERHEADERTYPE *) m_out_mem_ptr;
+         m_platform_list =
+             (OMX_QCOM_PLATFORM_PRIVATE_LIST *) pPtr;
+         m_platform_entry = (OMX_QCOM_PLATFORM_PRIVATE_ENTRY *)
+             (((char *)m_platform_list) + nPlatformListSize);
+         m_pmem_info = (OMX_QCOM_PLATFORM_PRIVATE_PMEM_INFO *)
+             (((char *)m_platform_entry) + nPlatformEntrySize);
+         pPlatformList = m_platform_list;
+         pPlatformEntry = m_platform_entry;
+         pPMEMInfo = m_pmem_info;
+         //m_out_bm_ptr   = (((char *) pPMEMInfo)     + nPMEMInfoSize);
+         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "UOB::Memory Allocation Succeeded for OUT port%p\n",
+                  m_out_mem_ptr);
+
+         // Settting the entire storage nicely
+         QTV_MSG_PRIO4(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                  "UOB::bHdr %p OutMem %p PE %p pmem[%p]\n",
+                  bufHdr, m_out_mem_ptr, pPlatformEntry,
+                  pPMEMInfo);
+         for (i = 0; i < m_out_buf_count; i++) {
+            memset(bufHdr, 0, sizeof(OMX_BUFFERHEADERTYPE));
+            bufHdr->nSize = sizeof(OMX_BUFFERHEADERTYPE);
+            bufHdr->nVersion.nVersion = OMX_SPEC_VERSION;
+            // Set the values when we determine the right HxW param
+            bufHdr->nAllocLen = get_output_buffer_size();
+            bufHdr->nFilledLen = 0;
+            bufHdr->pAppPrivate = appData;
+            bufHdr->nOutputPortIndex =
+                OMX_CORE_OUTPUT_PORT_INDEX;
+            // Platform specific PMEM Information
+            // Initialize the Platform Entry
+            pPlatformEntry->type =
+                OMX_QCOM_PLATFORM_PRIVATE_PMEM;
+            pPlatformEntry->entry = pPMEMInfo;
+            // Initialize the Platform List
+            pPlatformList->nEntries = 1;
+            pPlatformList->entryList = pPlatformEntry;
+
+            // Assign the buffer space to the bufHdr
+            bufHdr->pBuffer = (OMX_U8*)eglImage;
+            // Keep this NULL till vdec_open is done
+            bufHdr->pOutputPortPrivate = NULL;
+            pPMEMInfo->offset = 0;
+            bufHdr->pPlatformPrivate = pPlatformList;
+            // Move the buffer and buffer header pointers
+            bufHdr++;
+            pPMEMInfo++;
+            pPlatformEntry++;
+            pPlatformList++;
+         }
+         *bufferHdr = (OMX_BUFFERHEADERTYPE *) m_out_mem_ptr;
+         output_buf = (vdec_frame *) &m_vdec_cfg.outputBuffer[0];
+         output_buf[0].buffer.pmem_id = fd;
+         output_buf[0].buffer.pmem_offset = offset;
+         output_buf[0].buffer.bufferSize = get_output_buffer_size();
+         output_buf[0].buffer.base = (OMX_U8*)eglImage;
+         output_buf[0].buffer.state = VDEC_BUFFER_WITH_APP_FLUSHED;
+         BITMASK_SET(m_out_bm_count, 0x0);
+      } else {
+         QTV_MSG_PRIO3(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+                  "Output buf mem alloc failed[0x%x][0x%x][0x%x]\n",
+                  m_out_mem_ptr, m_loc_use_buf_hdr, pPtr);
+         eRet = OMX_ErrorInsufficientResources;
+         return eRet;
+      }
+   } else {
+      for (i = 0; i < m_out_buf_count; i++) {
+         if (BITMASK_ABSENT(m_out_bm_count, i)) {
+            break;
+         }
+      }
+      if (i < m_out_buf_count) {
+         // found an empty buffer at i
+         *bufferHdr =
+             ((OMX_BUFFERHEADERTYPE *) m_out_mem_ptr) + i;
+         (*bufferHdr)->pAppPrivate = appData;
+         (*bufferHdr)->pBuffer = (OMX_U8*)eglImage;
+         output_buf = (vdec_frame *) &m_vdec_cfg.outputBuffer[0] ;
+         output_buf[i].buffer.pmem_id = fd;
+         output_buf[i].buffer.pmem_offset = offset;
+         output_buf[i].buffer.bufferSize = get_output_buffer_size();
+         output_buf[i].buffer.base = (OMX_U8*)eglImage;
+         output_buf[i].buffer.state = VDEC_BUFFER_WITH_APP_FLUSHED;
+         BITMASK_SET(m_out_bm_count, i);
+      } else {
+         QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                 "All Output Buf Allocated:\n");
+         eRet = OMX_ErrorInsufficientResources;
+         return eRet;
+      }
+   }
+   if (allocate_done()) {
+      omx_vdec_display_in_buf_hdrs();
+      omx_vdec_display_out_buf_hdrs();
+      //omx_vdec_dup_use_buf_hdrs();
+      //omx_vdec_display_out_use_buf_hdrs();
+
+      // If use buffer and pmem alloc buffers
+      // then dont make any local copies of use buf headers
+      omx_vdec_set_use_egl_buf_flg();
+   }
+   return eRet;
+}
 /* ======================================================================
 FUNCTION
   omx_vdec::UseEGLImage
@@ -6715,9 +6991,64 @@ OMX_ERRORTYPE omx_vdec::use_EGL_image(OMX_IN OMX_HANDLETYPE hComp,
                   bufferHdr, OMX_IN OMX_U32 port,
                   OMX_IN OMX_PTR appData,
                   OMX_IN void *eglImage) {
+   OMX_ERRORTYPE eRet = OMX_ErrorNone;
+   QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
+           "use_EGL_image: Begin  \n");
+
+   if (m_state == OMX_StateInvalid) {
    QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
-           "Error : use_EGL_image:  Not Implemented \n");
-   return OMX_ErrorNotImplemented;
+              "Use Buffer in Invalid State\n");
+      return OMX_ErrorInvalidState;
+   }
+   if (port == OMX_CORE_OUTPUT_PORT_INDEX) {
+      eRet =
+          use_egl_output_buffer(hComp, bufferHdr, port, appData, eglImage);
+   } else {
+      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+               "Error: Invalid Port Index received %d\n",
+               (int)port);
+      eRet = OMX_ErrorBadPortIndex;
+   }
+
+   if (eRet == OMX_ErrorNone) {
+      if (allocate_done()) {
+         if (BITMASK_PRESENT
+             (m_flags, OMX_COMPONENT_IDLE_PENDING)) {
+            // Send the callback now
+            BITMASK_CLEAR((m_flags),
+                     OMX_COMPONENT_IDLE_PENDING);
+            post_event(OMX_CommandStateSet, OMX_StateIdle,
+                  OMX_COMPONENT_GENERATE_EVENT);
+         }
+      }
+      if (port == OMX_CORE_OUTPUT_PORT_INDEX
+            && m_out_bPopulated) {
+         if (BITMASK_PRESENT
+             (m_flags, OMX_COMPONENT_OUTPUT_ENABLE_PENDING)) {
+            if (m_event_port_settings_sent) {
+                  if (VDEC_SUCCESS != vdec_commit_memory(m_vdec)) {
+   QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+                                "ERROR!!! vdec_commit_memory failed\n");
+                   m_bInvalidState = true;
+                   m_cb.EventHandler(&m_cmp, m_app_data,
+                          OMX_EventError,
+                          OMX_ErrorInsufficientResources, 0,
+                          NULL);
+                   eRet = OMX_ErrorInsufficientResources;
+                 }
+            }
+            // Populate the Buffer Headers
+            omx_vdec_get_out_buf_hdrs();
+            BITMASK_CLEAR((m_flags),
+                     OMX_COMPONENT_OUTPUT_ENABLE_PENDING);
+            post_event(OMX_CommandPortEnable,
+                  OMX_CORE_OUTPUT_PORT_INDEX,
+                  OMX_COMPONENT_GENERATE_EVENT);
+            m_event_port_settings_sent = false;
+         }
+      }
+   }
+   return eRet;
 }
 
 /* ======================================================================
@@ -7786,12 +8117,6 @@ OMX_ERRORTYPE omx_vdec::
       return OMX_ErrorHardware;
    }
 
-   if (VDEC_SUCCESS != vdec_commit_memory(m_vdec)) {
-      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
-              "ERROR!!! vdec_commit_memory failed\n");
-      eRet = OMX_ErrorInsufficientResources;
-   }
-
    if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.avc", 26) == 0) {
       if (m_h264_utils != NULL) {
          m_h264_utils->allocate_rbsp_buffer(OMX_CORE_INPUT_BUFFER_SIZE);
@@ -7842,6 +8167,14 @@ void omx_vdec::omx_vdec_free_output_port_memory(void) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
               "Freeing the pmem info\n");
       m_pmem_info = NULL;
+   }
+   if(omx_vdec_get_use_egl_buf_flg() && m_vdec_cfg.outputBuffer) {
+       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+              "Freeing the output buf info egl \n");
+      if (m_vdec_cfg.outputBuffer) {
+         free(m_vdec_cfg.outputBuffer);
+         m_vdec_cfg.outputBuffer = NULL;
+      }
    }
 }
 
