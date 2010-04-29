@@ -1038,6 +1038,11 @@ Vdec_ReturnType vdec_post_input_buffer(struct VDecoder * dec,
             input.offset);
    //input.avsync_state
 
+#ifdef USE_PMEM_ADSP_CACHED
+   //Flush/clean the cache (bit-stream data sent to driver)
+   vdec_cachemaint(input.pmem_id, dec->ctxt->inputBuffer[buf_index].base, copy_size, PMEM_CACHE_FLUSH);
+#endif
+
    QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
             "vdec: received ts: %lld",
             frame->timestamp);
@@ -1164,6 +1169,13 @@ Vdec_ReturnType vdec_release_frame(struct VDecoder * dec,
             "vdec: released_frame with ptr: %d", buf);
    return VDEC_SUCCESS;
 }
+
+#ifdef USE_PMEM_ADSP_CACHED
+void vdec_cachemaint(int pmem_id, void *addr, unsigned size, PMEM_CACHE_OP op)
+{
+   pmem_cachemaint(pmem_id,addr,size, op);
+}
+#endif
 
 Vdec_ReturnType vdec_flush_port(struct VDecoder * dec, int *nFlushedFrames,
             Vdec_PortType port)

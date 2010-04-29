@@ -105,9 +105,13 @@ int pmem_alloc(struct pmem *pmem, unsigned sz)
 
 #if USE_SMI
    pmem->fd = open("/dev/pmem_gpu0", O_RDWR);
-#else
+#elif defined(USE_PMEM_ADSP_CACHED)
    pmem->fd = open("/dev/pmem_adsp", O_RDWR);
+#else
+   //uncached behavior
+   pmem->fd = open("/dev/pmem_adsp", O_RDWR|O_SYNC);
 #endif
+
    if (pmem->fd < 0) {
       perror("cannot open pmem device");
       return -1;
@@ -153,4 +157,44 @@ void pmem_free(struct pmem *pmem)
 #endif
 }
 
+#ifdef USE_PMEM_ADSP_CACHED
+void pmem_cachemaint(int pmem_id, void *addr, unsigned size, PMEM_CACHE_OP op)
+{
+   struct pmem_addr pmem_addr;
+   pmem_addr.vaddr = (unsigned long)addr;
+   pmem_addr.offset = 0;
+   pmem_addr.length = size;
+   int errno_pmem = 0;
+
+   switch(op) {
+   case PMEM_CACHE_FLUSH: //Cache clean/flush operation
+   {
+      if (errno_pmem = ioctl(pmem_id, PMEM_CLEAN_CACHES, &pmem_addr)) {
+         printf("pmem_cleancache Error !!!!  errno=%d\n", errno_pmem);
+      }
+      break;
+   }
+
+   case PMEM_CACHE_INVALIDATE: //Cache invalidate operation
+   {
+      if (errno_pmem = ioctl(pmem_id, PMEM_INV_CACHES, &pmem_addr)) {
+         printf("pmem_invcache Error !!!!  errno=%d\n", errno_pmem);
+      }
+      break;
+   }
+
+   case PMEM_CACHE_FLUSH_INVALIDATE: //Cache clean+invalidate operation
+   {
+      if (errno_pmem = ioctl(pmem_id, PMEM_CLEAN_INV_CACHES, &pmem_addr)) {
+          printf("pmem_clean_inv_cache Error !!!!  errno=%d\n", errno_pmem);
+      }
+      break;
+   }
+
+   default:
+      printf("pmem_cachemaint: Invalid cache operation.!!!!\n");
+      break;
+   }
+}
+#endif
 #endif //QLE_BUILD

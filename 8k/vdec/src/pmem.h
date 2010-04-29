@@ -42,4 +42,34 @@ struct pmem {
 int pmem_alloc(struct pmem *out, unsigned sz);
 void pmem_free(struct pmem *pmem);
 
+#ifdef USE_PMEM_ADSP_CACHED
+
+//Cache operation to perform on the pmem region
+typedef enum {
+  PMEM_CACHE_FLUSH = 0,
+  PMEM_CACHE_INVALIDATE,
+  PMEM_CACHE_FLUSH_INVALIDATE,
+  PMEM_CACHE_INVALID_OP
+} PMEM_CACHE_OP;
+
+/**
+  * This method is used to perform cache operations on the pmem regoin
+  * in the decoder.
+  *
+  * Prerequisite: pmem_alloc should have been called.
+  *
+  *  @param[in] pmem_id
+  *     id of the pmem region to use.
+  *
+  *  @param[in] addr
+  *     The virtual addr of the pmem region
+  *
+  *  @param[in] size
+  *     The size of the region
+  *
+  *  @param[in] op
+  *     Cache operation to perform as defined by PMEM_CACHE_OP
+  */
+void pmem_cachemaint(int pmem_id, void *addr, unsigned size, PMEM_CACHE_OP op);
+#endif
 #endif

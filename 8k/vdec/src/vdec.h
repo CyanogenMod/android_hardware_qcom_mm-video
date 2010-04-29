@@ -480,6 +480,27 @@ extern "C" {
                int *nFlushedFrames,
                Vdec_PortType port);
 
+#ifdef USE_PMEM_ADSP_CACHED
+/**
+  * This method is used to perform cache operations on the pmem region in the decoder.
+  *
+  * Prerequisite: vdec_open should have been called.
+  *
+  *  @param[in] pmem_id
+  *     id of the pmem region to use
+  *
+  *  @param[in] addr
+  *     The virtual addr of the pmem region
+  *
+  *  @param[in] size
+  *     The size of the region
+  *
+  *  @param[in] op
+  *     Cache operation to perform as defined by PMEM_CACHE_OP
+  */
+  void vdec_cachemaint(int pmem_id, void *addr, unsigned size, PMEM_CACHE_OP op);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
