@@ -62,8 +62,7 @@ char filename [] = "/data/input-bitstream.m4v";
 
 #define VC1_SP_MP_START_CODE        0xC5000000
 #define VC1_SP_MP_START_CODE_MASK   0xFF000000
-#define VC1_AP_START_CODE           0x00000100
-#define VC1_AP_START_CODE_MASK      0xFFFFFF00
+#define VC1_AP_SEQ_START_CODE       0x0F010000
 #define VC1_STRUCT_C_PROFILE_MASK   0xF0
 #define VC1_STRUCT_B_LEVEL_MASK     0xE0000000
 #define VC1_SIMPLE_PROFILE          0
@@ -288,7 +287,7 @@ omx_vdec::omx_vdec(): m_state(OMX_StateInvalid),
                       pdest_frame (NULL),
                       m_inp_heap_ptr (NULL),
                       m_heap_inp_bm_count (0),
-                      codec_type_parse (0),
+                      codec_type_parse ((codec_type)0),
                       first_frame_meta (true),
                       frame_count (0),
                       nal_length(0),
@@ -304,8 +303,8 @@ omx_vdec::omx_vdec(): m_state(OMX_StateInvalid),
                       stride(0),
                       scan_lines(0),
                       m_error_propogated(false),
-                      m_device_file_ptr(NULL)
-
+                      m_device_file_ptr(NULL),
+                      m_vc1_profile((vc1_profile_type)0)
 {
   /* Assumption is that , to begin with , we have all the frames with decoder */
   DEBUG_PRINT_HIGH("\n In OMX vdec Constuctor");
@@ -877,7 +876,7 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
      driver_context.decoder_format = VDEC_CODECTYPE_MPEG4;
      eCompressionFormat = OMX_VIDEO_CodingMPEG4;
      /*Initialize Start Code for MPEG4*/
-     codec_type_parse = 0;
+     codec_type_parse = CODEC_TYPE_MPEG4;
      m_frame_parser.init_start_codes (codec_type_parse);
   }
   else if(!strncmp(driver_context.kind, "OMX.qcom.video.decoder.h263",\
@@ -887,7 +886,7 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
      DEBUG_PRINT_LOW("\n H263 Decoder selected");
      driver_context.decoder_format = VDEC_CODECTYPE_H263;
      eCompressionFormat = OMX_VIDEO_CodingH263;
-     codec_type_parse = 1;
+     codec_type_parse = CODEC_TYPE_H263;
      m_frame_parser.init_start_codes (codec_type_parse);
   }
   else if(!strncmp(driver_context.kind, "OMX.qcom.video.decoder.avc",\
@@ -896,7 +895,7 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
     strncpy((char *)m_cRole, "video_decoder.avc",OMX_MAX_STRINGNAME_SIZE);
     driver_context.decoder_format = VDEC_CODECTYPE_H264;
     eCompressionFormat = OMX_VIDEO_CodingAVC;
-    codec_type_parse = 2;
+    codec_type_parse = CODEC_TYPE_H264;
     m_frame_parser.init_start_codes (codec_type_parse);
     m_frame_parser.init_nal_length(nal_length);
   }
@@ -906,6 +905,8 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
     strncpy((char *)m_cRole, "video_decoder.vc1",OMX_MAX_STRINGNAME_SIZE);
     driver_context.decoder_format = VDEC_CODECTYPE_VC1;
     eCompressionFormat = OMX_VIDEO_CodingWMV;
+    codec_type_parse = CODEC_TYPE_VC1;
+    m_frame_parser.init_start_codes (codec_type_parse);
   }
   else
   {
@@ -2188,16 +2189,8 @@ OMX_ERRORTYPE  omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE     hComp,
 
         DEBUG_PRINT_LOW("Getparameter: OMX_IndexParamStandardComponentRole %d\n",
                     paramIndex);
-        if(NULL != comp_role->cRole)
-        {
-            strncpy((char*)comp_role->cRole,(const char*)m_cRole,
+        strncpy((char*)comp_role->cRole,(const char*)m_cRole,
                     OMX_MAX_STRINGNAME_SIZE);
-        }
-        else
-        {
-            DEBUG_PRINT_ERROR("Getparameter:NULL parameter for role\n");
-            eRet =OMX_ErrorBadParameter;
-        }
         break;
     }
     /* Added for parameter test */
@@ -2486,6 +2479,35 @@ OMX_ERRORTYPE  omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE     hComp,
 
          m_color_format = portFmt->eColorFormat;
       }
+    }
+    break;
+
+    case OMX_QcomIndexPortDefn:
+    {
+        OMX_QCOM_PARAM_PORTDEFINITIONTYPE *portFmt =
+            (OMX_QCOM_PARAM_PORTDEFINITIONTYPE *) paramData;
+        DEBUG_PRINT_LOW("set_parameter: OMX_IndexQcomParamPortDefinitionType %d\n",
+            portFmt->nFramePackingFormat);
+
+        /* Input port */
+        if (portFmt->nPortIndex == 0)
+        {
+            if (portFmt->nFramePackingFormat == OMX_QCOM_FramePacking_Arbitrary)
+            {
+               arbitrary_bytes = true;
+            }
+            else if (portFmt->nFramePackingFormat ==
+                OMX_QCOM_FramePacking_OnlyOneCompleteFrame)
+            {
+               arbitrary_bytes = false;
+            }
+            else
+            {
+                DEBUG_PRINT_ERROR("Setparameter: unknown FramePacking format %d\n",
+                    portFmt->nFramePackingFormat);
+                eRet = OMX_ErrorUnsupportedSetting;
+            }
+        }
     }
     break;
 
@@ -2815,6 +2837,53 @@ OMX_ERRORTYPE  omx_vdec::set_config(OMX_IN OMX_HANDLETYPE      hComp,
       m_vendor_config.nDataSize = config->nDataSize;
       m_vendor_config.pData = (OMX_U8 *) malloc((config->nDataSize));
       memcpy(m_vendor_config.pData, config->pData,config->nDataSize);
+    }
+    else if (!strcmp(driver_context.kind, "OMX.qcom.video.decoder.vc1"))
+    {
+        if(m_vendor_config.pData)
+        {
+            free(m_vendor_config.pData);
+            m_vendor_config.pData = NULL;
+            m_vendor_config.nDataSize = 0;
+        }
+
+        if (((*((OMX_U32 *) config->pData)) &
+             VC1_SP_MP_START_CODE_MASK) ==
+             VC1_SP_MP_START_CODE)
+        {
+            DEBUG_PRINT_LOW("set_config - VC1 simple/main profile\n");
+            m_vendor_config.nPortIndex = config->nPortIndex;
+            m_vendor_config.nDataSize = config->nDataSize;
+            m_vendor_config.pData =
+                (OMX_U8 *) malloc(config->nDataSize);
+            memcpy(m_vendor_config.pData, config->pData,
+                   config->nDataSize);
+            m_vc1_profile = VC1_SP_MP_RCV;
+        }
+        else if (*((OMX_U32 *) config->pData) == VC1_AP_SEQ_START_CODE)
+        {
+            DEBUG_PRINT_LOW("set_config - VC1 Advance profile\n");
+            m_vendor_config.nPortIndex = config->nPortIndex;
+            m_vendor_config.nDataSize = config->nDataSize;
+            m_vendor_config.pData =
+                (OMX_U8 *) malloc((config->nDataSize));
+            memcpy(m_vendor_config.pData, config->pData,
+                   config->nDataSize);
+            m_vc1_profile = VC1_AP;
+        }
+        else if ((config->nDataSize == VC1_STRUCT_C_LEN))
+        {
+            DEBUG_PRINT_LOW("set_config - VC1 Simple/Main profile struct C only\n");
+            m_vendor_config.nPortIndex = config->nPortIndex;
+            m_vendor_config.nDataSize  = config->nDataSize;
+            m_vendor_config.pData = (OMX_U8*)malloc(config->nDataSize);
+            memcpy(m_vendor_config.pData,config->pData,config->nDataSize);
+            m_vc1_profile = VC1_SP_MP_RCV;
+        }
+        else
+        {
+            DEBUG_PRINT_LOW("set_config - Error: Unknown VC1 profile\n");
+        }
     }
     return ret;
   }
@@ -3177,6 +3246,26 @@ OMX_ERRORTYPE  omx_vdec::use_output_buffer(
     {
       DEBUG_PRINT_ERROR("Output buf mem alloc failed[0x%x][0x%x]\n",\
                                         m_out_mem_ptr, pPtr);
+      if(m_out_mem_ptr)
+      {
+        free(m_out_mem_ptr);
+        m_out_mem_ptr = NULL;
+      }
+      if(pPtr)
+      {
+        free(pPtr);
+        pPtr = NULL;
+      }
+      if(driver_context.ptr_outputbuffer)
+      {
+        free(driver_context.ptr_outputbuffer);
+        driver_context.ptr_outputbuffer = NULL;
+      }
+      if(driver_context.ptr_respbuffer)
+      {
+        free(driver_context.ptr_respbuffer);
+        driver_context.ptr_respbuffer = NULL;
+      }
       eRet =  OMX_ErrorInsufficientResources;
     }
   }
@@ -3858,6 +3947,26 @@ OMX_ERRORTYPE  omx_vdec::allocate_output_buffer(
     {
       DEBUG_PRINT_ERROR("Output buf mem alloc failed[0x%x][0x%x]\n",\
                                         m_out_mem_ptr, pPtr);
+      if(m_out_mem_ptr)
+      {
+        free(m_out_mem_ptr);
+        m_out_mem_ptr = NULL;
+      }
+      if(pPtr)
+      {
+        free(pPtr);
+        pPtr = NULL;
+      }
+      if(driver_context.ptr_outputbuffer)
+      {
+        free(driver_context.ptr_outputbuffer);
+        driver_context.ptr_outputbuffer = NULL;
+      }
+      if(driver_context.ptr_respbuffer)
+      {
+        free(driver_context.ptr_respbuffer);
+        driver_context.ptr_respbuffer = NULL;
+      }
       eRet =  OMX_ErrorInsufficientResources;
     }
   }
@@ -4336,6 +4445,12 @@ OMX_ERRORTYPE  omx_vdec::empty_this_buffer_proxy(OMX_IN OMX_HANDLETYPE         h
     return OMX_ErrorNone;
   }
 
+  if(m_event_port_settings_sent && !arbitrary_bytes)
+  {
+    post_event((unsigned)hComp,(unsigned)buffer,OMX_COMPONENT_GENERATE_ETB);
+    return OMX_ErrorNone;
+  }
+
   temp_buffer = (struct vdec_bufferpayload *)buffer->pInputPortPrivate;
 
   if ((temp_buffer -  driver_context.ptr_inputbuffer) > m_inp_buf_count)
@@ -4361,7 +4476,7 @@ OMX_ERRORTYPE  omx_vdec::empty_this_buffer_proxy(OMX_IN OMX_HANDLETYPE         h
 
   }
 
-  if (!arbitrary_bytes && first_frame < 2  && codec_type_parse == 0)
+  if (!arbitrary_bytes && first_frame < 2  && codec_type_parse == CODEC_TYPE_MPEG4)
   {
 
     if (first_frame == 0)
@@ -5111,16 +5226,16 @@ OMX_ERRORTYPE omx_vdec::omx_vdec_check_port_settings(bool *port_setting_changed)
       DEBUG_PRINT_ERROR("\n Error in VDEC_IOCTL_GET_BUFFER_REQ in port_setting");
       return OMX_ErrorHardware;
     }
-    DEBUG_PRINT_LOW("\n Queried Dimensions H=%d W=%d Act H=%d W=%d",
+    DEBUG_PRINT_HIGH("\n Queried Dimensions H=%d W=%d Act H=%d W=%d",
                        driver_context.video_resoultion.frame_height,
                        driver_context.video_resoultion.frame_width,
                        m_height,m_width);
-    DEBUG_PRINT_LOW("\n Queried Buffer ACnt=%d BSiz=%d Act Acnt=%d Bsiz=%d",
+    DEBUG_PRINT_HIGH("\n Queried Buffer ACnt=%d BSiz=%d Act Acnt=%d Bsiz=%d",
                        driver_context.output_buffer.actualcount,
                        driver_context.output_buffer.buffer_size,
                        m_out_buf_count,m_out_buf_size);
 
-    DEBUG_PRINT_LOW("\n Queried stride cuur Str=%d cur scan=%d Act str=%d act scan =%d",
+    DEBUG_PRINT_HIGH("\n Queried stride cuur Str=%d cur scan=%d Act str=%d act scan =%d",
                        driver_context.video_resoultion.stride,driver_context.video_resoultion.scan_lines,
                        stride,scan_lines);
 
@@ -5526,12 +5641,15 @@ OMX_ERRORTYPE omx_vdec::push_input_buffer (OMX_HANDLETYPE hComp)
   {
     switch (codec_type_parse)
     {
-      case 0:
-      case 1:
-        ret =  push_input_mpeg4_h263 (hComp);
+      case CODEC_TYPE_MPEG4:
+      case CODEC_TYPE_H263:
+        ret =  push_input_sc_codec(hComp);
       break;
-      case 2:
+      case CODEC_TYPE_H264:
         ret = push_input_h264(hComp);
+      break;
+      case CODEC_TYPE_VC1:
+        ret = push_input_vc1(hComp);
       break;
     }
     if (ret != OMX_ErrorNone)
@@ -5545,7 +5663,7 @@ OMX_ERRORTYPE omx_vdec::push_input_buffer (OMX_HANDLETYPE hComp)
   return ret;
 }
 
-OMX_ERRORTYPE omx_vdec::push_input_mpeg4_h263 (OMX_HANDLETYPE hComp)
+OMX_ERRORTYPE omx_vdec::push_input_sc_codec(OMX_HANDLETYPE hComp)
 {
   OMX_U32 partial_frame = 1;
   OMX_BOOL genarte_edb = OMX_TRUE,generate_eos = OMX_TRUE;
@@ -5919,6 +6037,75 @@ OMX_ERRORTYPE omx_vdec::push_input_h264 (OMX_HANDLETYPE hComp)
 	}
   }
   return OMX_ErrorNone;
+}
+
+OMX_ERRORTYPE omx_vdec::push_input_vc1 (OMX_HANDLETYPE hComp)
+{
+    OMX_U8 *buf, *pdest;
+    OMX_U32 partial_frame = 1;
+    OMX_U32 buf_len, dest_len;
+
+    if(frame_count == 0)
+    {
+        DEBUG_PRINT_LOW("\nFirst i/p buffer for VC1 arbitrary bytes\n");
+        if(!m_vendor_config.pData)
+        {
+            DEBUG_PRINT_LOW("\nCheck profile type in 1st source buffer\n");
+            buf = psource_frame->pBuffer;
+            buf_len = psource_frame->nFilledLen;
+
+            if ((*((OMX_U32 *) buf) & VC1_SP_MP_START_CODE_MASK) ==
+                VC1_SP_MP_START_CODE)
+            {
+                m_vc1_profile = VC1_SP_MP_RCV;
+            }
+            else if(*((OMX_U32 *) buf) & VC1_AP_SEQ_START_CODE)
+            {
+                m_vc1_profile = VC1_AP;
+            }
+            else
+            {
+                DEBUG_PRINT_ERROR("\nInvalid sequence layer in first buffer\n");
+                return OMX_ErrorStreamCorrupt;
+            }
+        }
+        else
+        {
+            pdest = pdest_frame->pBuffer + pdest_frame->nFilledLen +
+                pdest_frame->nOffset;
+            dest_len = pdest_frame->nAllocLen - (pdest_frame->nFilledLen +
+                pdest_frame->nOffset);
+
+            if(dest_len < m_vendor_config.nDataSize)
+            {
+                DEBUG_PRINT_ERROR("\nDestination buffer full\n");
+                return OMX_ErrorBadParameter;
+            }
+            else
+            {
+                memcpy(pdest, m_vendor_config.pData, m_vendor_config.nDataSize);
+                pdest_frame->nFilledLen += m_vendor_config.nDataSize;
+            }
+        }
+    }
+
+    switch(m_vc1_profile)
+    {
+        case VC1_AP:
+            DEBUG_PRINT_LOW("\n VC1 AP, hence parse using frame start code");
+            if (push_input_sc_codec(hComp) != OMX_ErrorNone)
+            {
+                DEBUG_PRINT_ERROR("\n Error In Parsing VC1 AP start code");
+                return OMX_ErrorBadParameter;
+            }
+        break;
+
+        case VC1_SP_MP_RCV:
+        default:
+            DEBUG_PRINT_ERROR("\n Unsupported VC1 profile in ArbitraryBytes Mode\n");
+            return OMX_ErrorBadParameter;
+    }
+    return OMX_ErrorNone;
 }
 
 bool omx_vdec::register_output_buffers()

@@ -43,6 +43,9 @@ static unsigned char MPEG4_mask_code[4] = {0xFF,0xFF,0xFF,0xFF};
 static unsigned char H263_start_code[4] = {0x00,0x00,0x80,0x00};
 static unsigned char H263_mask_code[4] = {0xFF,0xFF,0xFC,0x00};
 
+static unsigned char VC1_AP_start_code[4] = {0x00,0x00,0x01,0x0D};
+static unsigned char VC1_AP_mask_code[4] = {0xFF,0xFF,0xFF,0xFF};
+
 frame_parse::frame_parse():parse_state(A0),
                            last_byte(0),
                            prev_one(0),
@@ -66,30 +69,34 @@ frame_parse::~frame_parse ()
     mutils = NULL;
 }
 
-int frame_parse::init_start_codes (unsigned int codec_type)
+int frame_parse::init_start_codes (codec_type codec_type_parse)
 {
-    /*Check if Codec Type is proper and we are in proper state*/
-    if (codec_type > 2 || parse_state != A0)
-    {
-      return -1;
-    }
+	/*Check if Codec Type is proper and we are in proper state*/
+	if (codec_type_parse > CODEC_TYPE_VC1 || parse_state != A0)
+	{
+	  return -1;
+	}
 
-    switch (codec_type)
-    {
-    case 0:
-        memcpy (start_code,MPEG4_start_code,4);
-        memcpy (mask_code,MPEG4_mask_code,4);
-        break;
-    case 1:
-        memcpy (start_code,H263_start_code,4);
-        memcpy (mask_code,H263_mask_code,4);
-        break;
-    case 2:
-        memcpy (start_code,H264_start_code,4);
-        memcpy (mask_code,H264_mask_code,4);
-        break;
-    }
-    return 1;
+	switch (codec_type_parse)
+	{
+	case CODEC_TYPE_MPEG4:
+		memcpy (start_code,MPEG4_start_code,4);
+		memcpy (mask_code,MPEG4_mask_code,4);
+		break;
+	case CODEC_TYPE_H263:
+		memcpy (start_code,H263_start_code,4);
+		memcpy (mask_code,H263_mask_code,4);
+		break;
+	case CODEC_TYPE_H264:
+		memcpy (start_code,H264_start_code,4);
+		memcpy (mask_code,H264_mask_code,4);
+		break;
+	case CODEC_TYPE_VC1:
+		memcpy (start_code,VC1_AP_start_code,4);
+		memcpy (mask_code,VC1_AP_mask_code,4);
+		break;
+	}
+	return 1;
 }
 
 

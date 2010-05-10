@@ -355,6 +355,12 @@ private:
         OMX_CORE_OUTPUT_PORT_INDEX       =1
     };
 
+    enum vc1_profile_type
+    {
+        VC1_SP_MP_RCV = 1,
+        VC1_AP = 2
+    };
+
     struct omx_event
     {
         unsigned param1;
@@ -438,8 +444,9 @@ private:
                                                    );
 
     OMX_ERRORTYPE push_input_buffer (OMX_HANDLETYPE hComp);
-    OMX_ERRORTYPE push_input_mpeg4_h263 (OMX_HANDLETYPE hComp);
+    OMX_ERRORTYPE push_input_sc_codec (OMX_HANDLETYPE hComp);
     OMX_ERRORTYPE push_input_h264 (OMX_HANDLETYPE hComp);
+    OMX_ERRORTYPE push_input_vc1 (OMX_HANDLETYPE hComp);
 
     OMX_ERRORTYPE fill_this_buffer_proxy(OMX_HANDLETYPE       hComp,
                                        OMX_BUFFERHEADERTYPE *buffer);
@@ -582,7 +589,7 @@ private:
     OMX_BUFFERHEADERTYPE  *m_inp_heap_ptr;
     OMX_BUFFERHEADERTYPE  **m_phdr_pmem_ptr;
     unsigned int m_heap_inp_bm_count;
-    unsigned int codec_type_parse;
+    codec_type codec_type_parse;
     bool first_frame_meta;
     unsigned frame_count;
     unsigned nal_count;
@@ -602,6 +609,7 @@ private:
     unsigned int m_out_buf_size_recon;
     unsigned char m_hwdevice_name[80];
     FILE *m_device_file_ptr;
+    enum vc1_profile_type m_vc1_profile;
 };
 
 #endif // __OMX_VDEC_H__

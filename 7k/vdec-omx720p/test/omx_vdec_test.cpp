@@ -79,6 +79,7 @@ extern "C" {
 #define VOP_START_CODE 0x000001B6
 #define SHORT_HEADER_START_CODE 0x00008000
 #define VC1_START_CODE  0x00000100
+#define VC1_FRAME_START_CODE  0x0000010D
 #define NUMBER_OF_ARBITRARYBYTES_READ  (4 * 1024)
 #define VC1_SEQ_LAYER_SIZE_WITHOUT_STRUCTC 32
 #define VC1_SEQ_LAYER_SIZE_V1_WITHOUT_STRUCTC 16
@@ -143,9 +144,12 @@ static int (*Read_Buffer)(OMX_BUFFERHEADERTYPE  *pBufHdr );
 
 FILE * inputBufferFile;
 FILE * outputBufferFile;
+FILE * seqFile;
 int takeYuvLog = 0;
 int displayYuv = 0;
 int displayWindow = 0;
+int realtime_display = 0;
+struct timeval t_avsync={0};
 
 Queue *etb_queue = NULL;
 Queue *fbd_queue = NULL;
@@ -167,6 +171,8 @@ pthread_cond_t eos_cond;
 
 sem_t etb_sem;
 sem_t fbd_sem;
+sem_t seq_sem;
+sem_t in_flush_sem, out_flush_sem;
 
 OMX_PARAM_PORTDEFINITIONTYPE portFmt;
 OMX_PORT_PARAM_TYPE portParam;
@@ -192,15 +198,20 @@ void render_fb(struct OMX_BUFFERHEADERTYPE *pBufHdr);
 /************************************************************************/
 int input_buf_cnt = 0;
 int height =0, width =0;
+int sliceheight = 0, stride = 0;
 int used_ip_buf_cnt = 0;
 volatile int event_is_done = 0;
 int ebd_cnt, fbd_cnt;
 int bInputEosReached = 0;
 int bOutputEosReached = 0;
 char in_filename[512];
+char seq_file_name[512];
+unsigned char seq_enabled = 0, flush_in_progress = 0;
+unsigned int cmd_data = 0, etb_count = 0;;
 
+char curr_seq_command[100];
 int timeStampLfile = 0;
-int timestampInterval = 100;
+int timestampInterval = 33333;
 codec_format  codec_format_option;
 file_type     file_type_option;
 freeHandle_test freeHandle_option;
@@ -292,6 +303,82 @@ void event_complete(void )
     }
     pthread_mutex_unlock(&lock);
 }
+int get_next_command(FILE *seq_file)
+{
+    int i = -1;
+    do{
+        i++;
+        if(fread(&curr_seq_command[i], 1, 1, seq_file) != 1)
+            return -1;
+    }while(curr_seq_command[i] != '\n');
+    curr_seq_command[i] = 0;
+    printf("\n cmd_str = %s", curr_seq_command);
+    return 0;
+}
+
+void process_current_command(const char *seq_command)
+{
+    char *data_str = NULL;
+    unsigned int data = 0, bufCnt = 0, i = 0;
+    int frameSize;
+    OMX_ERRORTYPE ret;
+
+    if(strstr(seq_command, "pause") == seq_command)
+    {
+        printf("\n\n $$$$$   PAUSE    $$$$$");
+        data_str = (char*)seq_command + strlen("pause") + 1;
+        data = atoi(data_str);
+        printf("\n After frame number %u", data);
+        cmd_data = data;
+        sem_wait(&seq_sem);
+        printf("\n Sending PAUSE cmd to OMX compt");
+        OMX_SendCommand(dec_handle, OMX_CommandStateSet, OMX_StatePause,0);
+        wait_for_event();
+        printf("\n EventHandler for PAUSE DONE");
+    }
+    else if(strstr(seq_command, "sleep") == seq_command)
+    {
+        printf("\n\n $$$$$   SLEEP    $$$$$");
+        data_str = (char*)seq_command + strlen("sleep") + 1;
+        data = atoi(data_str);
+        printf("\n Sleep Time = %u ms", data);
+        usleep(data*1000);
+    }
+    else if(strstr(seq_command, "resume") == seq_command)
+    {
+        printf("\n\n $$$$$   RESUME    $$$$$");
+        printf("\n Immediate effect", data);
+        printf("\n Sending PAUSE cmd to OMX compt");
+        OMX_SendCommand(dec_handle, OMX_CommandStateSet, OMX_StateExecuting,0);
+        wait_for_event();
+        printf("\n EventHandler for RESUME DONE");
+    }
+    else if(strstr(seq_command, "flush") == seq_command)
+    {
+        printf("\n\n $$$$$   FLUSH    $$$$$");
+        data_str = (char*)seq_command + strlen("flush") + 1;
+        data = atoi(data_str);
+        printf("\n After frame number %u", data);
+        cmd_data = data;
+        sem_wait(&seq_sem);
+        printf("\n Sending FLUSH cmd to OMX compt");
+        flush_in_progress = 1;
+        OMX_SendCommand(dec_handle, OMX_CommandFlush, OMX_ALL, 0);
+        wait_for_event();
+        flush_in_progress = 0;
+        printf("\n EventHandler for FLUSH DONE");
+        printf("\n Post EBD_thread flush sem");
+        sem_post(&in_flush_sem);
+        printf("\n Post FBD_thread flush sem");
+        sem_post(&out_flush_sem);
+    }
+    else
+    {
+        printf("\n\n $$$$$   INVALID CMD    $$$$$");
+        printf("\n seq_command[%s] is invalid", seq_command);
+        seq_enabled = 0;
+    }
+}
 
 void* ebd_thread(void* pArg)
 {
@@ -299,6 +386,13 @@ void* ebd_thread(void* pArg)
   {
     int readBytes =0;
     OMX_BUFFERHEADERTYPE* pBuffer = NULL;
+
+    if(flush_in_progress)
+    {
+        printf("\n EBD_thread flush wait start");
+        sem_wait(&in_flush_sem);
+        printf("\n EBD_thread flush wait complete");
+    }
 
     sem_wait(&etb_sem);
     pthread_mutex_lock(&etb_lock);
@@ -309,19 +403,32 @@ void* ebd_thread(void* pArg)
       DEBUG_PRINT_ERROR("Error - No etb pBuffer to dequeue\n");
       continue;
     }
+
     pBuffer->nOffset = 0;
     if((readBytes = Read_Buffer(pBuffer)) > 0) {
-      pBuffer->nFilledLen = readBytes;
-      OMX_EmptyThisBuffer(dec_handle,pBuffer);
+        pBuffer->nFilledLen = readBytes;
+        OMX_EmptyThisBuffer(dec_handle,pBuffer);
+        etb_count++;
+        if(cmd_data == etb_count)
+        {
+            sem_post(&seq_sem);
+            printf("\n Posted seq_sem");
+        }
     }
     else
     {
-      pBuffer->nFlags |= OMX_BUFFERFLAG_EOS;
-      bInputEosReached = true;
-      pBuffer->nFilledLen = readBytes;
-      OMX_EmptyThisBuffer(dec_handle,pBuffer);
-      DEBUG_PRINT("EBD::Either EOS or Some Error while reading file\n");
-      break;
+        pBuffer->nFlags |= OMX_BUFFERFLAG_EOS;
+        bInputEosReached = true;
+        pBuffer->nFilledLen = readBytes;
+        OMX_EmptyThisBuffer(dec_handle,pBuffer);
+        DEBUG_PRINT("EBD::Either EOS or Some Error while reading file\n");
+        etb_count++;
+        if(cmd_data == etb_count)
+        {
+            sem_post(&seq_sem);
+            printf("\n Posted seq_sem");
+        }
+        break;
     }
   }
   return NULL;
@@ -331,8 +438,22 @@ void* fbd_thread(void* pArg)
 {
   while(currentStatus != INVALID_STATE)
   {
+    long current_avsync_time = 0, delta_time = 0;
+    int canDisplay = 1;
+    static int contigous_drop_frame = 0;
+    static long base_avsync_time = 0;
+    static long base_timestamp = 0;
+    long lipsync_time = 250000;
     int bytes_written = 0;
     OMX_BUFFERHEADERTYPE *pBuffer;
+
+    if(flush_in_progress)
+    {
+        printf("\n FBD_thread flush wait start");
+        sem_wait(&out_flush_sem);
+        printf("\n FBD_thread flush wait complete");
+    }
+
     sem_wait(&fbd_sem);
     DEBUG_PRINT("Inside %s fbd_cnt[%d] \n", __FUNCTION__, fbd_cnt);
 
@@ -356,16 +477,57 @@ void* fbd_thread(void* pArg)
        continue;
     }
 
-    if (displayYuv && pBuffer->nFilledLen > 0)
+    if (realtime_display)
+    {
+      if(!gettimeofday(&t_avsync,NULL))
+      {
+         current_avsync_time =(t_avsync.tv_sec*1000000)+t_avsync.tv_usec;
+      }
+
+      if (base_avsync_time != 0)
+      {
+        pthread_mutex_lock(&fbd_lock);
+        delta_time = (current_avsync_time - base_avsync_time) - ((long)pBuffer->nTimeStamp - base_timestamp);
+        if (delta_time < 0 )
+        {
+          DEBUG_PRINT_ERROR("Sleep %d us. AV Sync time is left behind\n",
+                 -delta_time);
+          usleep(-delta_time);
+          canDisplay = 1;
+        }
+        else if ((delta_time>lipsync_time) && (contigous_drop_frame < 6))
+        {
+          DEBUG_PRINT_ERROR("Error - Drop the frame at the renderer. Video frame with ts %lu usec behind by %ld usec"
+                         ", pBuffer->nFilledLen %u\n",
+                        (unsigned long)pBuffer->nTimeStamp, delta_time, pBuffer->nFilledLen);
+          canDisplay = 0;
+          contigous_drop_frame++;
+        }
+        else
+    {
+          canDisplay = 1;
+        }
+        pthread_mutex_unlock(&fbd_lock);
+      }
+      else
+      {
+        base_avsync_time = current_avsync_time;
+        base_timestamp = (long)pBuffer->nTimeStamp;
+      }
+    }
+
+    if (!flush_in_progress && displayYuv && canDisplay && pBuffer->nFilledLen > 0)
     {
         if(overlay_fb(pBuffer))
             break;
-      //QPERF_TIME(render_fb, render_fb(pBuffer));
+        contigous_drop_frame = 0;
     }
 
-    if (takeYuvLog) {
+    if (!flush_in_progress && takeYuvLog) {
+        pthread_mutex_lock(&fbd_lock);
         bytes_written = fwrite((const char *)pBuffer->pBuffer,
                                 pBuffer->nFilledLen,1,outputBufferFile);
+        pthread_mutex_unlock(&fbd_lock);
         if (bytes_written < 0) {
             DEBUG_PRINT("\nFillBufferDone: Failed to write to the file\n");
         }
@@ -430,9 +592,10 @@ OMX_ERRORTYPE EventHandler(OMX_IN OMX_HANDLETYPE hComponent,
         case OMX_EventError:
             DEBUG_PRINT("OMX_EventError \n");
             currentStatus = ERROR_STATE;
-            if (OMX_ErrorInvalidState == (OMX_ERRORTYPE)nData1)
+            if (OMX_ErrorInvalidState == (OMX_ERRORTYPE)nData1 ||
+                OMX_ErrorHardware == (OMX_ERRORTYPE)nData1)
             {
-              DEBUG_PRINT("Invalid State \n");
+              DEBUG_PRINT("Invalid State or hardware error \n");
               currentStatus = INVALID_STATE;
               if(event_is_done == 0)
               {
@@ -535,6 +698,13 @@ int main(int argc, char **argv)
     int test_option = 0;
     OMX_ERRORTYPE result;
 
+    if (argc < 2)
+    {
+      printf("To use it: ./mm-vdec-omx-test <clip location> \n");
+      printf("Command line argument is also available\n");
+      return -1;
+    }
+
     strncpy(in_filename, argv[1], strlen(argv[1])+1);
 
     if(argc > 5)
@@ -624,9 +794,9 @@ int main(int argc, char **argv)
       if(argc > 7)
       {
         displayWindow = atoi(argv[7]);
-        if(displayWindow > 4)
+        if(displayWindow > 0)
         {
-            printf(" display window 0-4 only supported forcing it to 0 \n");
+            printf(" Curently display window 0 only supported; ignoring other values\n");
             displayWindow = 0;
         }
       }
@@ -634,11 +804,42 @@ int main(int argc, char **argv)
       {
         displayWindow = 0;
       }
+
+      if((file_type_option == FILE_TYPE_PICTURE_START_CODE) ||
+         (file_type_option == FILE_TYPE_RCV) ||
+         (file_type_option == FILE_TYPE_VC1) && argc > 8)
+      {
+          realtime_display = atoi(argv[8]);
+      }
+
+      if(realtime_display)
+      {
+          takeYuvLog = 0;
+          if(argc > 9)
+          {
+              int fps = atoi(argv[9]);
+              timestampInterval = 1000000/fps;
+          }
+          else if(argc > 10)
+          {
+              strncpy(seq_file_name, argv[10], strlen(argv[10])+1);
+          }
+      }
+      else
+      {
+          if(argc > 9)
+          {
+              strncpy(seq_file_name, argv[9], strlen(argv[9])+1);
+          }
+      }
       height=144;width=176; // Assume Default as QCIF
+      sliceheight = 144;
+      stride = 176;
       printf("Executing DynPortReconfig QCIF 144 x 176 \n");
     }
     else
     {
+      int fps = 30;
       switch(file_type_option)
       {
           case FILE_TYPE_DAT_PER_AU:
@@ -712,12 +913,52 @@ int main(int argc, char **argv)
       scanf("%d", &displayWindow);
       fflush(stdin);
 
+      if(displayWindow > 0)
+      {
+          printf(" Curently display window 0 only supported; ignoring other values\n");
+          displayWindow = 0;
+      }
+
+      if((file_type_option == FILE_TYPE_PICTURE_START_CODE) ||
+         (file_type_option == FILE_TYPE_RCV) ||
+         (file_type_option == FILE_TYPE_VC1))
+      {
+          printf(" *********************************************\n");
+          printf(" DO YOU WANT TEST APP TO RENDER in Real time \n");
+          printf(" 0 --> NO\n 1 --> YES\n");
+          printf(" Warning: For H264, it require one NAL per frame clip.\n");
+          printf("          For Arbitrary bytes option, Real time display is not recommended\n");
+          printf(" *********************************************\n");
+          fflush(stdin);
+          scanf("%d", &realtime_display);
+          fflush(stdin);
+      }
+
+
+      if (realtime_display)
+      {
+          printf(" *********************************************\n");
+          printf(" ENTER THE CLIP FPS\n");
+          printf(" Exception: Timestamp extracted from clips will be used.\n");
+          printf(" *********************************************\n");
+          fflush(stdin);
+          scanf("%d", &fps);
+          fflush(stdin);
+          timestampInterval = 1000000/fps;
+      }
+      printf(" *********************************************\n");
+      printf(" ENTER THE SEQ FILE NAME\n");
+      printf(" *********************************************\n");
+      fflush(stdin);
+      scanf("%[^\n]", &seq_file_name);
+      fflush(stdin);
     }
 
     if (outputOption == 0)
     {
       displayYuv = 0;
       takeYuvLog = 0;
+      realtime_display = 0;
     }
     else if (outputOption == 1)
     {
@@ -726,11 +967,12 @@ int main(int argc, char **argv)
     else if (outputOption == 2)
     {
       takeYuvLog = 1;
+      realtime_display = 0;
     }
     else if (outputOption == 3)
     {
       displayYuv = 1;
-      takeYuvLog = 1;
+      takeYuvLog = !realtime_display;
     }
     else
     {
@@ -772,7 +1014,18 @@ int main(int argc, char **argv)
     {
       printf("Error - sem_init failed %d\n", errno);
     }
-
+    if (-1 == sem_init(&seq_sem, 0, 0))
+    {
+      printf("Error - sem_init failed %d\n", errno);
+    }
+    if (-1 == sem_init(&in_flush_sem, 0, 0))
+    {
+      printf("Error - sem_init failed %d\n", errno);
+    }
+    if (-1 == sem_init(&out_flush_sem, 0, 0))
+    {
+      printf("Error - sem_init failed %d\n", errno);
+    }
     etb_queue = alloc_queue();
     if (etb_queue == NULL)
     {
@@ -841,7 +1094,18 @@ int main(int argc, char **argv)
     {
       DEBUG_PRINT_ERROR("Error - sem_destroy failed %d\n", errno);
     }
-
+    if (-1 == sem_destroy(&seq_sem))
+    {
+      DEBUG_PRINT_ERROR("Error - sem_destroy failed %d\n", errno);
+    }
+    if (-1 == sem_destroy(&in_flush_sem))
+    {
+      DEBUG_PRINT_ERROR("Error - sem_destroy failed %d\n", errno);
+    }
+    if (-1 == sem_destroy(&out_flush_sem))
+    {
+      DEBUG_PRINT_ERROR("Error - sem_destroy failed %d\n", errno);
+    }
     if (displayYuv)
     {
       overlay_unset();
@@ -904,10 +1168,40 @@ int run_tests()
       break;
   }
 
+  if(strlen(seq_file_name))
+  {
+        seqFile = fopen (seq_file_name, "rb");
+        if (seqFile == NULL)
+        {
+            DEBUG_PRINT_ERROR("Error - Seq file %s could NOT be opened\n",
+                              seq_file_name);
+        }
+        else
+        {
+            DEBUG_PRINT("Seq file %s is opened \n", seq_file_name);
+            seq_enabled = 1;
+        }
+  }
+
   pthread_mutex_lock(&eos_lock);
   while (bOutputEosReached == false)
   {
-    pthread_cond_wait(&eos_cond, &eos_lock);
+    if(seq_enabled)
+    {
+        if(!get_next_command(seqFile))
+        {
+            process_current_command(curr_seq_command);
+        }
+        else
+        {
+            printf("\n Error in get_next_cmd or EOF");
+            seq_enabled = 0;
+        }
+    }
+    else
+    {
+        pthread_cond_wait(&eos_cond, &eos_lock);
+    }
   }
   pthread_mutex_unlock(&eos_lock);
 
@@ -1155,21 +1449,16 @@ int Play_Decoder()
       case FILE_TYPE_DAT_PER_AU:
       case FILE_TYPE_PICTURE_START_CODE:
       case FILE_TYPE_RCV:
+      case FILE_TYPE_VC1:
       {
         inputPortFmt.nFramePackingFormat = OMX_QCOM_FramePacking_OnlyOneCompleteFrame;
         break;
       }
 
       case FILE_TYPE_ARBITRARY_BYTES:
+      case FILE_TYPE_264_NAL_SIZE_LENGTH:
       {
         inputPortFmt.nFramePackingFormat = OMX_QCOM_FramePacking_Arbitrary;
-        break;
-      }
-
-      case FILE_TYPE_264_NAL_SIZE_LENGTH:
-      case FILE_TYPE_VC1:
-      {
-        inputPortFmt.nFramePackingFormat = OMX_QCOM_FramePacking_OnlyOneCompleteSubFrame;
         break;
       }
 
@@ -1305,30 +1594,49 @@ int Play_Decoder()
     rcv_v1 = 0;
 
     //QPERF_START(client_decode);
-    if ((codec_format_option == CODEC_FORMAT_VC1) && (file_type_option == FILE_TYPE_RCV))
+    if (codec_format_option == CODEC_FORMAT_VC1)
     {
       pInputBufHdrs[0]->nOffset = 0;
+      if(file_type_option == FILE_TYPE_RCV)
+      {
       frameSize = Read_Buffer_From_RCV_File_Seq_Layer(pInputBufHdrs[0]);
       pInputBufHdrs[0]->nFilledLen = frameSize;
-      DEBUG_PRINT("After Read_Buffer_From_RCV_File_Seq_Layer frameSize %d\n", frameSize);
-
-      pInputBufHdrs[0]->nOffset = pInputBufHdrs[0]->nFilledLen;
-      frameSize = Read_Buffer(pInputBufHdrs[0]);
-      pInputBufHdrs[0]->nFilledLen += frameSize;
-      DEBUG_PRINT("After Read_Buffer frameSize %d\n", frameSize);
+          DEBUG_PRINT("After Read_Buffer_From_RCV_File_Seq_Layer, "
+              "frameSize %d\n", frameSize);
+      }
+      else if(file_type_option == FILE_TYPE_VC1)
+      {
+          pInputBufHdrs[0]->nFilledLen = Read_Buffer(pInputBufHdrs[0]);
+          DEBUG_PRINT_ERROR("After 1st Read_Buffer for VC1, "
+              "pInputBufHdrs[0]->nFilledLen %d\n", pInputBufHdrs[0]->nFilledLen);
+      }
+      else
+      {
+          pInputBufHdrs[0]->nFilledLen = Read_Buffer(pInputBufHdrs[0]);
+          DEBUG_PRINT("After Read_Buffer pInputBufHdrs[0]->nFilledLen %d\n",
+              pInputBufHdrs[0]->nFilledLen);
+      }
 
       pInputBufHdrs[0]->nInputPortIndex = 0;
       pInputBufHdrs[0]->nOffset = 0;
       pInputBufHdrs[0]->nFlags = 0;
-      //pBufHdr[bufCnt]->pAppPrivate = this;
+
       ret = OMX_EmptyThisBuffer(dec_handle, pInputBufHdrs[0]);
-      if (OMX_ErrorNone != ret) {
+      if (ret != OMX_ErrorNone)
+      {
           DEBUG_PRINT_ERROR("ERROR - OMX_EmptyThisBuffer failed with result %d\n", ret);
           do_freeHandle_and_clean_up(true);
           return -1;
       }
-      else {
+      else
+      {
+          etb_count++;
           DEBUG_PRINT("OMX_EmptyThisBuffer success!\n");
+          if(cmd_data == etb_count)
+          {
+            sem_post(&seq_sem);
+            printf("\n Posted seq_sem");
+          }
       }
       i = 1;
     }
@@ -1348,6 +1656,12 @@ int Play_Decoder()
         bInputEosReached = true;
 
         OMX_EmptyThisBuffer(dec_handle, pInputBufHdrs[i]);
+        etb_count++;
+        if(cmd_data == etb_count)
+        {
+            sem_post(&seq_sem);
+            printf("\n Posted seq_sem");
+        }
         DEBUG_PRINT("File is small::Either EOS or Some Error while reading file\n");
         break;
       }
@@ -1363,6 +1677,12 @@ int Play_Decoder()
       }
       else {
           DEBUG_PRINT("OMX_EmptyThisBuffer success!\n");
+          etb_count++;
+          if(cmd_data == etb_count)
+          {
+            sem_post(&seq_sem);
+            printf("\n Posted seq_sem");
+          }
       }
     }
 
@@ -1424,6 +1744,8 @@ int Play_Decoder()
         }
         height = portFmt.format.video.nFrameHeight;
         width = portFmt.format.video.nFrameWidth;
+        stride = portFmt.format.video.nStride;
+        sliceheight = portFmt.format.video.nSliceHeight;
 
         error = Allocate_Buffer(dec_handle, &pOutYUVBufHdrs, portFmt.nPortIndex,
                                 portFmt.nBufferCountActual, portFmt.nBufferSize);
@@ -1852,6 +2174,12 @@ static int Read_Buffer_From_RCV_File(OMX_BUFFERHEADERTYPE  *pBufHdr)
       /* There is timestamp field only for regular RCV format and not for RCV V1 format*/
       readOffset = fread(&pBufHdr->nTimeStamp, 1, 4, inputBufferFile);
       DEBUG_PRINT("Read_Buffer_From_RCV_File - timeStamp %d\n", pBufHdr->nTimeStamp);
+      pBufHdr->nTimeStamp *= 1000;
+    }
+    else
+    {
+        pBufHdr->nTimeStamp = timeStampLfile;
+        timeStampLfile += timestampInterval;
     }
 
     if(len > pBufHdr->nAllocLen)
@@ -1890,17 +2218,17 @@ static int Read_Buffer_From_RCV_File(OMX_BUFFERHEADERTYPE  *pBufHdr)
 static int Read_Buffer_From_VC1_File(OMX_BUFFERHEADERTYPE  *pBufHdr)
 {
     static int timeStampLfile = 0;
+    OMX_U8 *pBuffer = pBufHdr->pBuffer + pBufHdr->nOffset;
     DEBUG_PRINT("Inside %s \n", __FUNCTION__);
 
     unsigned int readOffset = 0;
     int bytes_read = 0;
     unsigned int code = 0;
-    pBufHdr->nFilledLen = 0;
 
     do
     {
       //Start codes are always byte aligned.
-      bytes_read = fread(&pBufHdr->pBuffer[readOffset],1, 1,inputBufferFile);
+      bytes_read = fread(&pBuffer[readOffset],1, 1,inputBufferFile);
       if(!bytes_read)
       {
           DEBUG_PRINT("\n Bytes read Zero \n");
@@ -1911,7 +2239,7 @@ static int Read_Buffer_From_VC1_File(OMX_BUFFERHEADERTYPE  *pBufHdr)
       //VOP start code comparision
       if (readOffset>3)
       {
-        if (VC1_START_CODE == (code & 0xFFFFFF00))
+        if (VC1_FRAME_START_CODE == (code & 0xFFFFFFFF))
         {
           //Seek backwards by 4
           fseek(inputBufferFile, -4, SEEK_CUR);
@@ -1927,7 +2255,7 @@ static int Read_Buffer_From_VC1_File(OMX_BUFFERHEADERTYPE  *pBufHdr)
     }while (1);
 
     pBufHdr->nTimeStamp = timeStampLfile;
-    timeStampLfile += 100;
+    timeStampLfile += timestampInterval;
 
 #if 0
     {
@@ -2034,8 +2362,8 @@ int drawBG(void)
 void overlay_set()
 {
     overlayp = &overlay;
-    overlayp->src.width  = width;
-    overlayp->src.height = height;
+    overlayp->src.width  = stride;
+    overlayp->src.height = sliceheight;
     overlayp->src.format = MDP_Y_CRCB_H2V2;
     overlayp->src_rect.x = 0;
     overlayp->src_rect.y = 0;

@@ -33,6 +33,15 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "h264_utils.h"
 //#include <stdlib.h>
 
+
+enum codec_type
+{
+    CODEC_TYPE_MPEG4 = 0,
+    CODEC_TYPE_H263 = 1,
+    CODEC_TYPE_H264 = 2,
+    CODEC_TYPE_VC1 = 3
+};
+
 enum state_start_code_parse
 {
    A0,
@@ -53,7 +62,7 @@ class frame_parse
 
 public:
 	H264_Utils *mutils;
-	int init_start_codes (unsigned int codec_type);
+	int init_start_codes (codec_type codec_type_parse);
 	int parse_mpeg4_frame (OMX_BUFFERHEADERTYPE *source,
                          OMX_BUFFERHEADERTYPE *dest ,
 						             OMX_U32 *partialframe);
