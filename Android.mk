@@ -36,6 +36,7 @@ endif
 
 ifeq "$(findstring msm7630,$(TARGET_PRODUCT))" "msm7630"
     include $(OMX_VIDEO_PATH)/7k/vdec-omx720p/Android.mk
+    include $(OMX_VIDEO_PATH)/7k/venc-omx720p/Android.mk
 endif
 
 
