@@ -34,3 +34,8 @@ ifeq ($(TARGET_BOARD_PLATFORM), qsd8k)
     include $(OMX_VIDEO_PATH)/8k/venc/Android.mk
 endif
 
+ifeq "$(findstring msm7630,$(TARGET_PRODUCT))" "msm7630"
+    include $(OMX_VIDEO_PATH)/7k/vdec-omx720p/Android.mk
+endif
+
+
