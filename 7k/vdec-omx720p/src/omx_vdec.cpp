@@ -308,7 +308,8 @@ omx_vdec::omx_vdec(): m_state(OMX_StateInvalid),
                       sent_first_frame(false),
                       stride(0),
                       scan_lines(0),
-                      m_error_propogated(false)
+                      m_error_propogated(false),
+                      m_device_file_ptr(NULL)
 
 {
   /* Assumption is that , to begin with , we have all the frames with decoder */
@@ -317,6 +318,7 @@ omx_vdec::omx_vdec(): m_state(OMX_StateInvalid),
   memset(&m_cb,0,sizeof(m_cb));
   memset (&driver_context,0,sizeof(driver_context));
   memset (&h264_scratch,0,sizeof (OMX_BUFFERHEADERTYPE));
+  memset (m_hwdevice_name,0,sizeof(m_hwdevice_name));
   driver_context.video_driver_fd = -1;
   m_vendor_config.pData = NULL;
   pthread_mutex_init(&m_lock, NULL);
@@ -807,6 +809,27 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
   unsigned int   alignment = 0,buffer_size = 0;
   int fds[2];
   int r;
+   bool is_fluid = false;
+
+  if (!m_device_file_ptr) {
+    int bytes_read = 0,count = 0;
+    unsigned min_size;
+    m_device_file_ptr = fopen("/sys/devices/system/soc/soc0/hw_platform","rb");
+    if (m_device_file_ptr) {
+      (void)fgets((char *)m_hwdevice_name,sizeof(m_hwdevice_name),m_device_file_ptr);
+      DEBUG_PRINT_HIGH ("\n Name of the device is %s",m_hwdevice_name);
+      min_size = strnlen((const char *)m_hwdevice_name,sizeof(m_hwdevice_name));
+      if (strlen("Fluid") < min_size) {
+          min_size = strnlen("Fluid",sizeof("Fluid"));
+      }
+      if  (!strncmp("Fluid",(const char *)m_hwdevice_name,min_size)) {
+        is_fluid = true;
+      }
+      fclose (m_device_file_ptr);
+    } else {
+      DEBUG_PRINT_HIGH("\n Could not open hw_platform file");
+    }
+  }
 
   DEBUG_PRINT_HIGH("\n omx_vdec::component_init(): Start of New Playback");
   driver_context.video_driver_fd = open ("/dev/msm_vidc_dec",\
@@ -822,6 +845,24 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
     DEBUG_PRINT_ERROR("Omx_vdec::Comp Init Returning failure\n");
     return OMX_ErrorInsufficientResources;
   }
+
+#ifndef MULTI_DEC_INST
+  unsigned int instance_count = 0;
+  if (!is_fluid) {
+    ioctl_msg.outputparam = &instance_count;
+    if (ioctl (driver_context.video_driver_fd,VDEC_IOCTL_GET_NUMBER_INSTANCES,
+               (void*)&ioctl_msg) < 0){
+        DEBUG_PRINT_ERROR("\n Instance Query Failed");
+        return OMX_ErrorInsufficientResources;
+    }
+    if (instance_count > 1) {
+      close(driver_context.video_driver_fd);
+      DEBUG_PRINT_ERROR("\n Reject Second instance of Decoder");
+      driver_context.video_driver_fd = -1;
+      return OMX_ErrorInsufficientResources;
+    }
+  }
+#endif
 
 #if BITSTREAM_LOG
   outputBufferFile1 = fopen (filename, "ab");
