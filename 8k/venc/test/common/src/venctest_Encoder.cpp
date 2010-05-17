@@ -940,7 +940,7 @@ namespace venctest
       for (i = 0; i < m_nInputBuffers; i++)
       {
 
-        result = m_pInMem->Allocate(&pBuffer, m_nInputBufferSize);
+        result = m_pInMem->Allocate(&pBuffer, m_nInputBufferSize, VENC_PMEM_SMI);
         if (result != OMX_ErrorNone)
         {
           VENC_TEST_MSG_ERROR("error allocating input buffer");
@@ -1007,7 +1007,7 @@ namespace venctest
       m_pOutMem = new Pmem(m_nOutputBuffers);
       for (i = 0; i < m_nOutputBuffers; i++)
       {
-        result = m_pOutMem->Allocate(&pBuffer, m_nOutputBufferSize);
+        result = m_pOutMem->Allocate(&pBuffer, m_nOutputBufferSize, VENC_PMEM_SMI);
 
         if (result != OMX_ErrorNone)
         {

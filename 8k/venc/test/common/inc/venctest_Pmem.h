@@ -73,14 +73,14 @@ namespace venctest
     public:
 
       OMX_ERRORTYPE Allocate(OMX_U8** ppBuffer,
-          OMX_S32 nBytes);
+          OMX_S32 nBytes, int pmem_region_id);
 
       OMX_ERRORTYPE Free(OMX_U8* pBuffer);
 
     private:
 
       Pmem() {} // don't allow default constructor
-      OMX_ERRORTYPE pmem_alloc(struct venc_pmem *pBuf, int size);
+      OMX_ERRORTYPE pmem_alloc(struct venc_pmem *pBuf, int size, int pmem_region_id);
       OMX_ERRORTYPE pmem_free(struct venc_pmem *pBuf);
 
     private:

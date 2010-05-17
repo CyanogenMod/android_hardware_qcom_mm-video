@@ -69,12 +69,20 @@ namespace venctest
     }
   }
 
-  OMX_ERRORTYPE Pmem::pmem_alloc(struct venc_pmem *pBuf, int size)
+  OMX_ERRORTYPE Pmem::pmem_alloc(struct venc_pmem *pBuf, int size, int pmem_region_id)
   {
     struct pmem_region region;
 
     QC_OMX_MSG_HIGH("Opening pmem files with size 0x%x...",size,0,0);
-    pBuf->fd = open("/dev/pmem_adsp", O_RDWR);
+
+    if (pmem_region_id == VENC_PMEM_EBI1)
+	pBuf->fd = open("/dev/pmem_adsp", O_RDWR);
+    else if (pmem_region_id == VENC_PMEM_SMI)
+	pBuf->fd = open("/dev/pmem_smipool", O_RDWR);
+    else {
+	QC_OMX_MSG_ERROR("Pmem region id not supported \n", pmem_region_id);
+	return OMX_ErrorBadParameter;
+    }
 
     if (pBuf->fd < 0) {
       QC_OMX_MSG_ERROR("error could not open pmem device");
@@ -113,7 +121,7 @@ namespace venctest
   /////////////////////////////////////////////////////////////////////////////
   /////////////////////////////////////////////////////////////////////////////
   OMX_ERRORTYPE Pmem::Allocate(OMX_U8 ** ppBuffer,
-      OMX_S32 nBytes)
+      OMX_S32 nBytes, int pmem_region_id)
   {
     void *pVirt;
     OMX_ERRORTYPE result = OMX_ErrorNone;
@@ -141,7 +149,7 @@ namespace venctest
         if (pBuffer != NULL)
         {
           nBytesAlign = (nBytes + 4095) & (~4095);
-          pmem_alloc(pBuffer, nBytesAlign);
+          pmem_alloc(pBuffer, nBytesAlign, pmem_region_id);
 
           pVirt = pBuffer->virt;
           if (pVirt != NULL)
