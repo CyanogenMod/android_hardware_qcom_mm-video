@@ -556,14 +556,14 @@ void omx_vdec::frame_done_cb(struct vdec_context *ctxt,
                if(!pThis->omx_vdec_get_use_egl_buf_flg()) {
                pThis->fill_extradata(pBufHdr, frame);
             }
-               else
+               else {
                  pBufHdr->nFilledLen = pThis->get_output_buffer_size();
+                 // Invalidate the cache for the size of the decoded frame
+                  #ifdef USE_PMEM_ADSP_CACHED
+                  vdec_cachemaint(frame->buffer.pmem_id, pBufHdr->pBuffer, pBufHdr->nFilledLen, PMEM_CACHE_INVALIDATE);
+                  #endif
+                }
             }
-
-#ifdef USE_PMEM_ADSP_CACHED
-            // Invalidate the cache for the size of the decoded frame
-            vdec_cachemaint(frame->buffer.pmem_id, pBufHdr->pBuffer, pBufHdr->nFilledLen, PMEM_CACHE_INVALIDATE);
-#endif
 
             // If the decoder provides frame done for last frame then set the eos flag.
             if ((frame->flags & FRAME_FLAG_EOS)) {   /* || // @Temporary blocked
