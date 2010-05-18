@@ -109,11 +109,6 @@ void* async_message_thread (void *input)
       {
         DEBUG_PRINT_ERROR("\nERROR:Wrong ioctl message");
       }
-      /*Exit the thread for following messages*/
-      if (vdec_msg.msgcode == VDEC_MSG_RESP_STOP_DONE)
-      {
-        break;
-      }
     }
   }
   DEBUG_PRINT_HIGH("omx_vdec: Async thread stop\n");
@@ -835,6 +830,9 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
   driver_context.video_driver_fd = open ("/dev/msm_vidc_dec",\
                       O_RDWR|O_NONBLOCK);
 
+  DEBUG_PRINT_HIGH("\n omx_vdec::component_init(): Open returned fd %d",
+                   driver_context.video_driver_fd);
+
   if(driver_context.video_driver_fd == 0){
     driver_context.video_driver_fd = open ("/dev/msm_vidc_dec",\
                       O_RDWR|O_NONBLOCK);
@@ -1310,7 +1308,7 @@ OMX_ERRORTYPE  omx_vdec::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
          else
          {
            BITMASK_SET(&m_flags,OMX_COMPONENT_PAUSE_PENDING);
-           DEBUG_PRINT_LOW("send_command_proxy(): Idle-->Executing\n");
+           DEBUG_PRINT_LOW("send_command_proxy(): Idle-->Pause\n");
            bFlag = 0;
          }
       }
@@ -2164,6 +2162,7 @@ OMX_ERRORTYPE  omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE     hComp,
         DEBUG_PRINT_ERROR("get_parameter: OMX_IndexParamOtherInit %08x\n",
                           paramIndex);
         eRet =OMX_ErrorUnsupportedIndex;
+        break;
     }
     case OMX_IndexParamStandardComponentRole:
     {
@@ -2220,6 +2219,18 @@ OMX_ERRORTYPE  omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE     hComp,
     case OMX_IndexParamVideoAvc:
         {
             DEBUG_PRINT_LOW("get_parameter: OMX_IndexParamVideoAvc %08x\n",
+                        paramIndex);
+            break;
+        }
+    case OMX_IndexParamVideoH263:
+        {
+            DEBUG_PRINT_LOW("get_parameter: OMX_IndexParamVideoH263 %08x\n",
+                        paramIndex);
+            break;
+        }
+    case OMX_IndexParamVideoMpeg4:
+        {
+            DEBUG_PRINT_LOW("get_parameter: OMX_IndexParamVideoMpeg4 %08x\n",
                         paramIndex);
             break;
         }
@@ -2335,7 +2346,7 @@ OMX_ERRORTYPE  omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE     hComp,
               return OMX_ErrorUnsupportedSetting;
           }
           m_out_buf_count = portDefn->nBufferCountActual;
-
+          m_out_buf_count_recon = m_out_buf_count;
         DEBUG_PRINT_LOW("set_parameter:OMX_IndexParamPortDefinition output port\n");
       }
       else if(OMX_DirInput == portDefn->eDir)
@@ -2468,6 +2479,18 @@ OMX_ERRORTYPE  omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE     hComp,
           comp_role = (OMX_PARAM_COMPONENTROLETYPE *) paramData;
           DEBUG_PRINT_LOW("set_parameter: OMX_IndexParamStandardComponentRole %s\n",
                        comp_role->cRole);
+
+          if((m_state == OMX_StateLoaded)&&
+              !BITMASK_PRESENT(&m_flags,OMX_COMPONENT_IDLE_PENDING))
+          {
+           DEBUG_PRINT_LOW("Set Parameter called in valid state");
+          }
+          else
+          {
+             DEBUG_PRINT_ERROR("Set Parameter called in Invalid State\n");
+             return OMX_ErrorIncorrectStateOperation;
+          }
+
           if(!strncmp(driver_context.kind, "OMX.qcom.video.decoder.avc",OMX_MAX_STRINGNAME_SIZE))
           {
               if(!strncmp((char*)comp_role->cRole,"video_decoder.avc",OMX_MAX_STRINGNAME_SIZE))
@@ -2562,6 +2585,18 @@ OMX_ERRORTYPE  omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE     hComp,
       case OMX_IndexParamVideoAvc:
           {
               DEBUG_PRINT_LOW("set_parameter: OMX_IndexParamVideoAvc %d\n",
+                    paramIndex);
+              break;
+          }
+      case OMX_IndexParamVideoH263:
+          {
+              DEBUG_PRINT_LOW("set_parameter: OMX_IndexParamVideoH263 %d\n",
+                    paramIndex);
+              break;
+          }
+      case OMX_IndexParamVideoMpeg4:
+          {
+              DEBUG_PRINT_LOW("set_parameter: OMX_IndexParamVideoMpeg4 %d\n",
                     paramIndex);
               break;
           }
@@ -3222,6 +3257,7 @@ OMX_ERRORTYPE  omx_vdec::use_buffer(
       DEBUG_PRINT_ERROR("Error: Invalid Port Index received %d\n",(int)port);
       eRet = OMX_ErrorBadPortIndex;
     }
+    DEBUG_PRINT_LOW("Use Buffer: port %u, buffer %p, eRet %d", port, *bufferHdr, eRet);
 
     if(eRet == OMX_ErrorNone)
     {
@@ -3278,6 +3314,20 @@ OMX_ERRORTYPE omx_vdec::free_input_buffer(OMX_BUFFERHEADERTYPE *bufferHdr)
     DEBUG_PRINT_LOW("\n Free Input Buffer index = %d",index);
     if (driver_context.ptr_inputbuffer[index].pmem_fd > 0)
     {
+       struct vdec_ioctl_msg ioctl_msg = {NULL,NULL};
+       struct vdec_setbuffer_cmd setbuffers;
+       setbuffers.buffer_type = VDEC_BUFFER_TYPE_INPUT;
+       memcpy (&setbuffers.buffer,&driver_context.ptr_inputbuffer[index],
+          sizeof (vdec_bufferpayload));
+       ioctl_msg.inputparam  = &setbuffers;
+       ioctl_msg.outputparam = NULL;
+       int ioctl_r = ioctl (driver_context.video_driver_fd,
+                            VDEC_IOCTL_FREE_BUFFER, &ioctl_msg);
+       if (ioctl_r < 0)
+       {
+          DEBUG_PRINT_ERROR("\nVDEC_IOCTL_FREE_BUFFER returned error %d", ioctl_r);
+       }
+
        DEBUG_PRINT_LOW("\n unmap the input buffer fd=%d",
                     driver_context.ptr_inputbuffer[index].pmem_fd);
        DEBUG_PRINT_LOW("\n unmap the input buffer size=%d  address = %d",
@@ -3307,7 +3357,24 @@ OMX_ERRORTYPE omx_vdec::free_output_buffer(OMX_BUFFERHEADERTYPE *bufferHdr)
 
   if (index < m_out_buf_count && driver_context.ptr_outputbuffer)
   {
-    DEBUG_PRINT_LOW("\n Free ouput Buffer index = %d",index);
+    DEBUG_PRINT_LOW("\n Free ouput Buffer index = %d addr = %x", index,
+                    driver_context.ptr_outputbuffer[index].bufferaddr);
+
+    if (!gate_output_buffers)
+    {
+      struct vdec_ioctl_msg ioctl_msg = {NULL,NULL};
+      struct vdec_setbuffer_cmd setbuffers;
+      setbuffers.buffer_type = VDEC_BUFFER_TYPE_OUTPUT;
+      memcpy (&setbuffers.buffer,&driver_context.ptr_outputbuffer[index],
+        sizeof (vdec_bufferpayload));
+      ioctl_msg.inputparam  = &setbuffers;
+      ioctl_msg.outputparam = NULL;
+      DEBUG_PRINT_LOW("\nRelease the Output Buffer");
+      if (ioctl (driver_context.video_driver_fd, VDEC_IOCTL_FREE_BUFFER,
+            &ioctl_msg) < 0)
+        DEBUG_PRINT_ERROR("\nRelease output buffer failed in VCD");
+    }
+
     if (driver_context.ptr_outputbuffer[0].pmem_fd > 0)
     {
        DEBUG_PRINT_LOW("\n unmap the output buffer fd = %d",
