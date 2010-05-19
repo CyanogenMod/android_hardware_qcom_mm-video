@@ -430,12 +430,12 @@ class Venc : public qc_omx_component
     /**********************************************************************//**
      * @brief change qp range
      *************************************************************************/
-    OMX_ERRORTYPE update_config_qp_range(OMX_IN  OMX_QCOM_VIDEO_CONFIG_QPRANGE* pConfig);
+    OMX_ERRORTYPE update_config_qp_range(OMX_IN  QOMX_VIDEO_TEMPORALSPATIALTYPE* pConfig);
 
     /**********************************************************************//**
      * @brief change the intra period
      *************************************************************************/
-    OMX_ERRORTYPE update_config_intra_period(OMX_IN  OMX_QCOM_VIDEO_CONFIG_INTRAPERIODTYPE* pConfig);
+    OMX_ERRORTYPE update_config_intra_period(OMX_IN  QOMX_VIDEO_INTRAPERIODTYPE* pConfig);
 #endif
 
     /**********************************************************************//**
@@ -500,8 +500,8 @@ class Venc : public qc_omx_component
     OMX_VIDEO_PARAM_QUANTIZATIONTYPE m_sParamQPs;
     OMX_CONFIG_INTRAREFRESHVOPTYPE m_sConfigIntraRefreshVOP;
 #ifdef QCOM_OMX_VENC_EXT
-    OMX_QCOM_VIDEO_CONFIG_QPRANGE m_sConfigQpRange;
-    OMX_QCOM_VIDEO_CONFIG_INTRAPERIODTYPE m_sConfigIntraPeriod;
+    QOMX_VIDEO_TEMPORALSPATIALTYPE m_sConfigQpRange;
+    QOMX_VIDEO_INTRAPERIODTYPE m_sConfigIntraPeriod;
 #endif
     OMX_VIDEO_CONFIG_NALSIZE m_sConfigNAL;
     OMX_BUFFERHEADERTYPE* m_pInBuffHeaders;
