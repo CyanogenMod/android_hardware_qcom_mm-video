@@ -53,6 +53,7 @@ public:
 
   unsigned venc_resume(void);
   bool venc_use_buf(void*, unsigned);
+  bool venc_free_buf(void*, unsigned);
   bool venc_empty_buf(void *, void *);
   bool venc_fill_buf(void *, void *);
 

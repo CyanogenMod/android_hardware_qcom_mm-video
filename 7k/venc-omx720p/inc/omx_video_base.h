@@ -148,6 +148,7 @@ public:
   virtual OMX_U32 dev_flush(unsigned) = 0;
   virtual OMX_U32 dev_resume(void) = 0;
   virtual bool dev_use_buf(void *,unsigned) = 0;
+  virtual bool dev_free_buf(void *,unsigned) = 0;
   virtual bool dev_empty_buf(void *, void *) = 0;
   virtual bool dev_fill_buf(void *buffer, void *) = 0;
   virtual bool dev_get_buf_req(OMX_U32 *,OMX_U32 *,OMX_U32 *,OMX_U32) = 0;

@@ -1426,10 +1426,14 @@ OMX_ERRORTYPE  omx_video::get_parameter(OMX_IN OMX_HANDLETYPE     hComp,
       DEBUG_PRINT_LOW("get_parameter: OMX_IndexParamPortDefinition\n");
       if(portDefn->nPortIndex == (OMX_U32) PORT_INDEX_IN)
       {
+        DEBUG_PRINT_LOW("\n i/p actual cnt = %d\n", m_sInPortDef.nBufferCountActual);
+        DEBUG_PRINT_LOW("\n i/p min cnt = %d\n", m_sInPortDef.nBufferCountMin);
         memcpy(portDefn, &m_sInPortDef, sizeof(m_sInPortDef));
       }
       else if(portDefn->nPortIndex == (OMX_U32) PORT_INDEX_OUT)
       {
+        DEBUG_PRINT_LOW("\n o/p actual cnt = %d\n", m_sOutPortDef.nBufferCountActual);
+        DEBUG_PRINT_LOW("\n o/p min cnt = %d\n", m_sOutPortDef.nBufferCountMin);
         memcpy(portDefn, &m_sOutPortDef, sizeof(m_sOutPortDef));
       }
       else
@@ -2260,6 +2264,10 @@ OMX_ERRORTYPE omx_video::free_input_buffer(OMX_BUFFERHEADERTYPE *bufferHdr)
     if(m_pInput_pmem[index].fd > 0 && input_use_buffer == false)
     {
       DEBUG_PRINT_LOW("\n FreeBuffer:: i/p AllocateBuffer case");
+      if(dev_free_buf(&m_pInput_pmem[index],PORT_INDEX_IN) != true)
+      {
+        DEBUG_PRINT_ERROR("\nERROR: dev_free_buf() Failed for i/p buf");
+      }
       munmap (m_pInput_pmem[index].buffer,m_pInput_pmem[index].size);
       close (m_pInput_pmem[index].fd);
       m_pInput_pmem[index].fd = -1;
@@ -2268,6 +2276,10 @@ OMX_ERRORTYPE omx_video::free_input_buffer(OMX_BUFFERHEADERTYPE *bufferHdr)
       m_use_input_pmem == OMX_FALSE))
     {
       DEBUG_PRINT_LOW("\n FreeBuffer:: i/p Heap UseBuffer case");
+      if(dev_free_buf(&m_pInput_pmem[index],PORT_INDEX_IN) != true)
+      {
+        DEBUG_PRINT_ERROR("\nERROR: dev_free_buf() Failed for i/p buf");
+      }
       munmap (m_pInput_pmem[index].buffer,m_pInput_pmem[index].size);
       close (m_pInput_pmem[index].fd);
       m_pInput_pmem[index].fd = -1;
@@ -2298,6 +2310,10 @@ OMX_ERRORTYPE omx_video::free_output_buffer(OMX_BUFFERHEADERTYPE *bufferHdr)
     if(m_pOutput_pmem[index].fd > 0 && output_use_buffer == false )
     {
       DEBUG_PRINT_LOW("\n FreeBuffer:: o/p AllocateBuffer case");
+      if(dev_free_buf(&m_pOutput_pmem[index],PORT_INDEX_OUT) != true)
+      {
+        DEBUG_PRINT_ERROR("ERROR: dev_free_buf Failed for o/p buf");
+      }
       munmap (m_pOutput_pmem[index].buffer,m_pOutput_pmem[index].size);
       close (m_pOutput_pmem[index].fd);
       m_pOutput_pmem[index].fd = -1;
@@ -2306,6 +2322,10 @@ OMX_ERRORTYPE omx_video::free_output_buffer(OMX_BUFFERHEADERTYPE *bufferHdr)
       && m_use_output_pmem == OMX_FALSE))
     {
       DEBUG_PRINT_LOW("\n FreeBuffer:: o/p Heap UseBuffer case");
+      if(dev_free_buf(&m_pOutput_pmem[index],PORT_INDEX_OUT) != true)
+      {
+        DEBUG_PRINT_ERROR("ERROR: dev_free_buf Failed for o/p buf");
+      }
       munmap (m_pOutput_pmem[index].buffer,m_pOutput_pmem[index].size);
       close (m_pOutput_pmem[index].fd);
       m_pOutput_pmem[index].fd = -1;
@@ -2702,7 +2722,8 @@ OMX_ERRORTYPE  omx_video::free_buffer(OMX_IN OMX_HANDLETYPE         hComp,
     // check if the buffer is valid
     nPortIndex = buffer - m_inp_mem_ptr;
 
-    DEBUG_PRINT_LOW("free_buffer on i/p port - Port idx %d \n", nPortIndex);
+    DEBUG_PRINT_LOW("free_buffer on i/p port - Port idx %d, actual cnt %d \n",
+                    nPortIndex, m_sInPortDef.nBufferCountActual);
     if(nPortIndex < m_sInPortDef.nBufferCountActual)
     {
       // Clear the bit associated with it.
@@ -2749,9 +2770,11 @@ OMX_ERRORTYPE  omx_video::free_buffer(OMX_IN OMX_HANDLETYPE         hComp,
   {
     // check if the buffer is valid
     nPortIndex = buffer - (OMX_BUFFERHEADERTYPE*)m_out_mem_ptr;
+
+    DEBUG_PRINT_LOW("free_buffer on o/p port - Port idx %d, actual cnt %d \n",
+                    nPortIndex, m_sOutPortDef.nBufferCountActual);
     if(nPortIndex < m_sOutPortDef.nBufferCountActual)
     {
-      DEBUG_PRINT_LOW("free_buffer on o/p port - Port idx %d \n", nPortIndex);
       // Clear the bit associated with it.
       BITMASK_CLEAR(&m_out_bm_count,nPortIndex);
       m_sOutPortDef.bPopulated = OMX_FALSE;

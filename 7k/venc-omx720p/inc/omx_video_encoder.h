@@ -60,6 +60,7 @@ private:
   OMX_U32 dev_flush(unsigned);
   OMX_U32 dev_resume(void);
   bool dev_use_buf( void *,unsigned);
+  bool dev_free_buf( void *,unsigned);
   bool dev_empty_buf(void *, void *);
   bool dev_fill_buf(void *, void *);
   bool dev_get_buf_req(OMX_U32 *,OMX_U32 *,OMX_U32 *,OMX_U32);
