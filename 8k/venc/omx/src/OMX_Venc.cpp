@@ -176,6 +176,16 @@ Venc::~Venc()
   ven_device_close(m_pDevice);
 }
 
+int roundingup( double val )
+{
+   int ret = (int) val;
+   val -= ret;
+   if(val >= 0.5)
+      return (int) ++ret;
+   else
+      return ret;
+}
+
 OMX_ERRORTYPE Venc::component_init(OMX_IN OMX_STRING pComponentName)
 {
   OMX_ERRORTYPE result = OMX_ErrorNone;
@@ -429,20 +439,11 @@ OMX_ERRORTYPE Venc::component_init(OMX_IN OMX_STRING pComponentName)
   m_sConfigIntraRefreshVOP.IntraRefreshVOP = OMX_FALSE;
 
 #ifdef QCOM_OMX_VENC_EXT
-  OMX_INIT_STRUCT(&m_sConfigQpRange, OMX_QCOM_VIDEO_CONFIG_QPRANGE);
+  OMX_INIT_STRUCT(&m_sConfigQpRange, QOMX_VIDEO_TEMPORALSPATIALTYPE);
   m_sConfigQpRange.nPortIndex = (OMX_U32) PORT_INDEX_OUT;
-  if (eCodec == OMX_VIDEO_CodingAVC)
-  {
-    m_sConfigQpRange.nMinQP = 2;
-    m_sConfigQpRange.nMaxQP = 51;
-  }
-  else
-  {
-    m_sConfigQpRange.nMinQP = 2;
-    m_sConfigQpRange.nMaxQP = 31;
-  }
+  m_sConfigQpRange.nTSFactor = 100;
 
-  OMX_INIT_STRUCT(&m_sConfigIntraPeriod, OMX_QCOM_VIDEO_CONFIG_INTRAPERIODTYPE);
+  OMX_INIT_STRUCT(&m_sConfigIntraPeriod, QOMX_VIDEO_INTRAPERIODTYPE);
   m_sConfigIntraPeriod.nPortIndex = (OMX_U32) PORT_INDEX_OUT;
   m_sConfigIntraPeriod.nPFrames = 29;
 #endif
@@ -790,28 +791,28 @@ OMX_ERRORTYPE Venc::get_parameter(OMX_IN  OMX_HANDLETYPE hComponent,
         break;
       }
 #ifdef QCOM_OMX_VENC_EXT
-    case OMX_QcomIndexParamVideoSyntaxHdr:  // QCOM extensions added
+    case QOMX_IndexParamVideoSyntaxHdr:  // QCOM extensions added
       {
-        OMX_QCOM_VIDEO_PARAM_SYNTAXHDRTYPE * pParam =
-          reinterpret_cast<OMX_QCOM_VIDEO_PARAM_SYNTAXHDRTYPE*>(pCompParam);
+        QOMX_VIDEO_SYNTAXHDRTYPE * pParam =
+          reinterpret_cast<QOMX_VIDEO_SYNTAXHDRTYPE*>(pCompParam);
 
         if (pParam != NULL &&
-            pParam->pBuff != NULL &&
-            pParam->nBuffLen != 0)
+            pParam->data != NULL &&
+            pParam->nBytes != 0)
         {
           int nOutSize;
           struct ven_seq_header sequence;
           struct venc_pmem sbuf;
-          sequence.pHdrBuf = (unsigned char*) pParam->pBuff;
-          sequence.nBufSize = (unsigned long) pParam->nBuffLen;
+          sequence.pHdrBuf = (unsigned char*) pParam->data;
+          sequence.nBufSize = (unsigned long) pParam->nBytes;
           sequence.nHdrLen = 0;
 
           if (sequence.nBufSize > 0 ) {
-            pmem_alloc(&sbuf, pParam->nBuffLen, VENC_PMEM_EBI1);
+            pmem_alloc(&sbuf, pParam->nBytes, VENC_PMEM_EBI1);
             if (!ven_get_sequence_hdr(m_pDevice, &sbuf, &nOutSize))
             {
-              pParam->nFilledLen = (OMX_U32) sequence.nBufSize;
-              memcpy(pParam->pBuff, sbuf.virt, nOutSize);
+              pParam->nBytes = (OMX_U32) sequence.nBufSize;
+              memcpy(pParam->data, sbuf.virt, nOutSize);
             }
             else
             {
@@ -1443,8 +1444,13 @@ OMX_ERRORTYPE Venc::driver_set_default_config()
   if (result == OMX_ErrorNone)
   {
     struct ven_qp_range qpRange;
-    qpRange.min_qp = (unsigned long) m_sConfigQpRange.nMinQP;
-    qpRange.max_qp = (unsigned long) m_sConfigQpRange.nMaxQP;
+    qpRange.min_qp = 2;
+    if(m_sOutPortDef.format.video.eCompressionFormat == OMX_VIDEO_CodingMPEG4 ||
+	m_sOutPortDef.format.video.eCompressionFormat == OMX_VIDEO_CodingH263) {
+      qpRange.max_qp = 8 + (int) roundingup(m_sConfigQpRange.nTSFactor * 0.23);
+    }else if (m_sOutPortDef.format.video.eCompressionFormat == OMX_VIDEO_CodingAVC){
+      qpRange.max_qp = 33 + roundingup(m_sConfigQpRange.nTSFactor * 0.18);
+    }
 
     rc = ven_set_qp_range(m_pDevice, &qpRange);
     if(rc)
@@ -2787,15 +2793,15 @@ OMX_ERRORTYPE Venc::get_config(OMX_IN  OMX_HANDLETYPE hComponent,
         break;
       }
 #ifdef QCOM_OMX_VENC_EXT
-    case OMX_QcomIndexConfigVideoQPRange:
+    case QOMX_IndexConfigVideoTemporalSpatialTradeOff:
       {
-        OMX_QCOM_VIDEO_CONFIG_QPRANGE* pParam = reinterpret_cast<OMX_QCOM_VIDEO_CONFIG_QPRANGE*>(pCompConfig);
+        QOMX_VIDEO_TEMPORALSPATIALTYPE* pParam = reinterpret_cast<QOMX_VIDEO_TEMPORALSPATIALTYPE*>(pCompConfig);
         memcpy(pParam, &m_sConfigQpRange, sizeof(m_sConfigQpRange));
         break;
       }
-    case OMX_QcomIndexConfigVideoIntraperiod:
+    case QOMX_IndexConfigVideoIntraperiod:
       {
-        OMX_QCOM_VIDEO_CONFIG_INTRAPERIODTYPE* pParam = reinterpret_cast<OMX_QCOM_VIDEO_CONFIG_INTRAPERIODTYPE*>(pCompConfig);
+        QOMX_VIDEO_INTRAPERIODTYPE* pParam = reinterpret_cast<QOMX_VIDEO_INTRAPERIODTYPE*>(pCompConfig);
         memcpy(pParam, &m_sConfigIntraPeriod, sizeof(m_sConfigIntraPeriod));
         break;
       }
@@ -3010,46 +3016,47 @@ OMX_ERRORTYPE Venc::update_config_intra_vop_refresh(OMX_IN  OMX_CONFIG_INTRAREFR
 }
 
 #ifdef QCOM_OMX_VENC_EXT
-OMX_ERRORTYPE Venc::update_config_qp_range(OMX_IN  OMX_QCOM_VIDEO_CONFIG_QPRANGE* pConfig)
+OMX_ERRORTYPE Venc::update_config_qp_range(OMX_IN  QOMX_VIDEO_TEMPORALSPATIALTYPE* pConfig)
 {
   OMX_ERRORTYPE result = OMX_ErrorNone;
-
   if (pConfig != NULL)
   {
-    if (pConfig->nPortIndex == (OMX_U32) PORT_INDEX_OUT)
-    {
-
-
-      ////////////////////////////////////////
-      // request iframe
-      ////////////////////////////////////////
-      int nOutSize;
-      struct ven_qp_range qp;
-      qp.min_qp = (unsigned long) pConfig->nMinQP;
-      qp.max_qp = (unsigned long) pConfig->nMaxQP;
-      QC_OMX_MSG_HIGH("setting qp range");
-      if (ven_set_qp_range(m_pDevice, &qp) != 0)
-      {
-        QC_OMX_MSG_ERROR("failed to set qp range");
-        result = translate_driver_error(GetLastError());
-      }
-      else
-      {
-        memcpy(&m_sConfigQpRange, pConfig, sizeof(m_sConfigQpRange));
-      }
-    }
-    else
-    {
-      QC_OMX_MSG_ERROR("bad port index");
-      result = OMX_ErrorBadPortIndex;
-    }
-  }
-  else
-  {
-    QC_OMX_MSG_ERROR("null param");
-    result = OMX_ErrorBadParameter;
-  }
-  return result;
+     if (pConfig->nPortIndex == (OMX_U32) PORT_INDEX_OUT)
+     {
+       if (pConfig->nTSFactor > 0 && pConfig->nTSFactor <= 100) {
+         int nOutSize;
+	 struct ven_qp_range qp;
+	 qp.min_qp = 2;
+	 if(m_sOutPortDef.format.video.eCompressionFormat == OMX_VIDEO_CodingMPEG4 ||
+	    m_sOutPortDef.format.video.eCompressionFormat == OMX_VIDEO_CodingH263) {
+	   qp.max_qp = 8 + (int) roundingup(pConfig->nTSFactor * 0.23);
+	 } else if(m_sOutPortDef.format.video.eCompressionFormat == OMX_VIDEO_CodingAVC) {
+	   qp.max_qp = 33 + roundingup(pConfig->nTSFactor * 0.18);
+	 }
+	 QC_OMX_MSG_HIGH("setting qp range");
+	 if (ven_set_qp_range(m_pDevice, &qp) != 0)
+	 {
+	   QC_OMX_MSG_ERROR("failed to set qp range");
+	   result = translate_driver_error(GetLastError());
+	 }
+	 else
+	 {
+	   memcpy(&m_sConfigQpRange, pConfig, sizeof(m_sConfigQpRange));
+	 }
+       }
+     }
+     else
+     {
+       QC_OMX_MSG_ERROR("bad port index");
+       result = OMX_ErrorBadPortIndex;
+     }
+   }
+   else
+   {
+     QC_OMX_MSG_ERROR("null param");
+     result = OMX_ErrorBadParameter;
+   }
+   return result;
 }
 #endif
 
@@ -3094,7 +3101,7 @@ OMX_ERRORTYPE Venc::update_config_nal_size(OMX_IN  OMX_VIDEO_CONFIG_NALSIZE* pCo
 }
 
 #ifdef QCOM_OMX_VENC_EXT
-OMX_ERRORTYPE Venc::update_config_intra_period(OMX_IN  OMX_QCOM_VIDEO_CONFIG_INTRAPERIODTYPE* pConfig)
+OMX_ERRORTYPE Venc::update_config_intra_period(OMX_IN  QOMX_VIDEO_INTRAPERIODTYPE* pConfig)
 {
   OMX_ERRORTYPE result = OMX_ErrorNone;
 
@@ -3113,10 +3120,6 @@ OMX_ERRORTYPE Venc::update_config_intra_period(OMX_IN  OMX_QCOM_VIDEO_CONFIG_INT
       {
         QC_OMX_MSG_ERROR("failed to set intra period");
         result = translate_driver_error(GetLastError());
-      }
-      else
-      {
-        memcpy(&m_sConfigQpRange, pConfig, sizeof(m_sConfigQpRange));
       }
     }
     else
@@ -3182,16 +3185,16 @@ OMX_ERRORTYPE Venc::set_config(OMX_IN  OMX_HANDLETYPE hComponent,
         break;
       }
 #ifdef QCOM_OMX_VENC_EXT
-    case OMX_QcomIndexConfigVideoQPRange:
+    case QOMX_IndexConfigVideoTemporalSpatialTradeOff:
       {
-        QC_OMX_MSG_MEDIUM("OMX_QcomIndexConfigVideoQPRange");
-        result = update_config_qp_range(reinterpret_cast<OMX_QCOM_VIDEO_CONFIG_QPRANGE*>(pCompConfig));
+        QC_OMX_MSG_MEDIUM("QOMX_IndexConfigVideoTemporalSpatialTradeOff");
+        result = update_config_qp_range(reinterpret_cast<QOMX_VIDEO_TEMPORALSPATIALTYPE*>(pCompConfig));
         break;
       }
-    case OMX_QcomIndexConfigVideoIntraperiod:
+    case QOMX_IndexConfigVideoIntraperiod:
       {
-        QC_OMX_MSG_MEDIUM("OMX_QcomIndexConfigVideoIntraperiod");
-        result = update_config_intra_period(reinterpret_cast<OMX_QCOM_VIDEO_CONFIG_INTRAPERIODTYPE*>(pCompConfig));
+        QC_OMX_MSG_MEDIUM("QOMX_IndexConfigVideoIntraperiod");
+        result = update_config_intra_period(reinterpret_cast<QOMX_VIDEO_INTRAPERIODTYPE*>(pCompConfig));
         break;
       }
 #endif
