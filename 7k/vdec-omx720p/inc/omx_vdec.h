@@ -586,7 +586,8 @@ private:
     unsigned int m_out_buf_count_recon;
     unsigned int m_out_buf_count_min_recon;
     unsigned int m_out_buf_size_recon;
-
+    unsigned char m_hwdevice_name[80];
+    FILE *m_device_file_ptr;
 };
 
 #endif // __OMX_VDEC_H__
