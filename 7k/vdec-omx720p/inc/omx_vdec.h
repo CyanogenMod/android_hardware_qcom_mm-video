@@ -79,6 +79,7 @@ extern "C"{
 //#include "OmxUtils.h"
 #include <linux/msm_vidc_dec.h>
 #include "frameparser.h"
+#include <linux/android_pmem.h>
 
 extern "C" {
   OMX_API void * get_omx_component_factory_fn(void);
@@ -447,6 +448,9 @@ private:
     bool release_output_done();
     bool release_input_done();
 
+    bool align_pmem_buffers(int pmem_fd, OMX_U32 buffer_size,
+                            OMX_U32 alignment);
+
     OMX_ERRORTYPE send_command_proxy(OMX_HANDLETYPE  hComp,
                                      OMX_COMMANDTYPE cmd,
                                      OMX_U32         param1,
@@ -455,6 +459,16 @@ private:
                      unsigned int p2,
                      unsigned int id
                     );
+    inline int clip2(int x)
+    {
+        x = x -1;
+        x = x | x >> 1;
+        x = x | x >> 2;
+        x = x | x >> 4;
+        x = x | x >> 16;
+        x = x + 1;
+        return x;
+    }
 
     inline void omx_report_error ()
     {
