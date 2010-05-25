@@ -70,6 +70,7 @@ class omx_vdec_linux:public omx_vdec {
       private:
     pthread_mutex_t m_lock;
    pthread_mutexattr_t m_lock_attr;
+   bool is_thread_created;
    //sem to handle the minimum procesing of commands
    sem_t m_cmd_lock;
 };

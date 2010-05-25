@@ -83,6 +83,7 @@ omx_vdec_linux::omx_vdec_linux()
 {
    m_pipe_in = -1;
    m_pipe_out = -1;
+   is_thread_created = false;
    pthread_mutexattr_init(&m_lock_attr);
    pthread_mutex_init(&m_lock, &m_lock_attr);
    sem_init(&m_cmd_lock, 0, 0);
@@ -99,8 +100,11 @@ omx_vdec_linux::~omx_vdec_linux()
       close(m_pipe_out);
       m_pipe_out = -1;
    }
+   if (is_thread_created) {
+      pthread_join(msg_thread_id,NULL);
+      is_thread_created = false;
+   }
 
-   pthread_join(msg_thread_id, NULL);
    pthread_mutexattr_destroy(&m_lock_attr);
    pthread_mutex_destroy(&m_lock);
    sem_destroy(&m_cmd_lock);
@@ -123,6 +127,8 @@ OMX_ERRORTYPE omx_vdec_linux::create_msg_thread()
       if (pthread_create(&msg_thread_id, 0, message_thread, this) < 0)
          eRet = OMX_ErrorInsufficientResources;
    }
+   if (eRet == OMX_ErrorNone)
+	   is_thread_created = true;
    return eRet;
 }
 
