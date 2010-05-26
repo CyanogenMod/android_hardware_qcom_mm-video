@@ -456,6 +456,7 @@ OMX_ERRORTYPE  omx_venc::set_parameter(OMX_IN OMX_HANDLETYPE     hComp,
       if(PORT_INDEX_IN == portDefn->nPortIndex)
       {
         DEBUG_PRINT_LOW("\n i/p actual cnt requested = %d\n", portDefn->nBufferCountActual);
+        DEBUG_PRINT_LOW("\n i/p min cnt requested = %d\n", portDefn->nBufferCountMin);
         DEBUG_PRINT_LOW("\n i/p buffersize requested = %d\n", portDefn->nBufferSize);
         if(handle->venc_set_param(paramData,OMX_IndexParamPortDefinition) != true)
         {
@@ -463,6 +464,8 @@ OMX_ERRORTYPE  omx_venc::set_parameter(OMX_IN OMX_HANDLETYPE     hComp,
           return OMX_ErrorUnsupportedSetting;
         }
 
+        DEBUG_PRINT_LOW("\n i/p previous actual cnt = %d\n", m_sInPortDef.nBufferCountActual);
+        DEBUG_PRINT_LOW("\n i/p previous min cnt = %d\n", m_sInPortDef.nBufferCountMin);
         m_sInPortDef.format.video.nFrameWidth = portDefn->format.video.nFrameWidth;
         m_sInPortDef.format.video.nFrameHeight = portDefn->format.video.nFrameHeight;
         m_sInPortDef.format.video.xFramerate = portDefn->format.video.xFramerate;
@@ -485,12 +488,17 @@ OMX_ERRORTYPE  omx_venc::set_parameter(OMX_IN OMX_HANDLETYPE     hComp,
       }
       else if(PORT_INDEX_OUT == portDefn->nPortIndex)
       {
+        DEBUG_PRINT_LOW("\n o/p actual cnt requested = %d\n", portDefn->nBufferCountActual);
+        DEBUG_PRINT_LOW("\n o/p min cnt requested = %d\n", portDefn->nBufferCountMin);
+        DEBUG_PRINT_LOW("\n o/p buffersize requested = %d\n", portDefn->nBufferSize);
         if(handle->venc_set_param(paramData,OMX_IndexParamPortDefinition) != true)
         {
           DEBUG_PRINT_ERROR("\nERROR: venc_set_param output failed");
           return OMX_ErrorUnsupportedSetting;
         }
 
+        DEBUG_PRINT_LOW("\n o/p previous actual cnt = %d\n", m_sOutPortDef.nBufferCountActual);
+        DEBUG_PRINT_LOW("\n o/p previous min cnt = %d\n", m_sOutPortDef.nBufferCountMin);
         m_sOutPortDef.nBufferCountActual = portDefn->nBufferCountActual;
       }
       else
@@ -648,6 +656,18 @@ OMX_ERRORTYPE  omx_venc::set_parameter(OMX_IN OMX_HANDLETYPE     hComp,
       comp_role = (OMX_PARAM_COMPONENTROLETYPE *) paramData;
       DEBUG_PRINT_LOW("set_parameter: OMX_IndexParamStandardComponentRole %s\n",
                   comp_role->cRole);
+
+      if((m_state == OMX_StateLoaded)&&
+          !BITMASK_PRESENT(&m_flags,OMX_COMPONENT_IDLE_PENDING))
+      {
+         DEBUG_PRINT_LOW("Set Parameter called in valid state");
+      }
+      else
+      {
+         DEBUG_PRINT_ERROR("Set Parameter called in Invalid State\n");
+         return OMX_ErrorIncorrectStateOperation;
+      }
+
       if(!strncmp((char*)m_nkind, "OMX.qcom.video.encoder.avc",OMX_MAX_STRINGNAME_SIZE))
       {
         if(!strncmp((char*)comp_role->cRole,"video_encoder.avc",OMX_MAX_STRINGNAME_SIZE))
@@ -1049,7 +1069,10 @@ bool omx_venc::dev_use_buf(void *buf_addr,unsigned port)
   return handle->venc_use_buf(buf_addr,port);
 }
 
-
+bool omx_venc::dev_free_buf(void *buf_addr,unsigned port)
+{
+  return handle->venc_free_buf(buf_addr,port);
+}
 
 bool omx_venc::dev_empty_buf(void *buffer, void *pmem_data_buf)
 {

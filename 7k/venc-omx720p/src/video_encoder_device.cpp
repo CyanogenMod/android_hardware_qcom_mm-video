@@ -158,12 +158,6 @@ void* async_venc_message_thread (void *input)
         DEBUG_PRINT_ERROR("\nERROR: Wrong ioctl message");
         break;
       }
-      /*Exit the thread for following messages*/
-      else if(venc_msg.msgcode == VEN_MSG_STOP)
-      {
-        DEBUG_PRINT_LOW("omx_venc: VEN_MSG_STOP in Async Thread\n");
-        break;
-      }
     }
   }
   DEBUG_PRINT_HIGH("omx_venc: Async Thread exit\n");
@@ -915,6 +909,68 @@ bool venc_dev::venc_use_buf(void *buf_addr, unsigned port)
   return true;
 }
 
+bool venc_dev::venc_free_buf(void *buf_addr, unsigned port)
+{
+  struct venc_ioctl_msg ioctl_msg = {NULL,NULL};
+  struct pmem *pmem_tmp;
+  struct venc_bufferpayload dev_buffer = {0};
+
+  pmem_tmp = (struct pmem *)buf_addr;
+
+  DEBUG_PRINT_LOW("\n venc_use_buf:: pmem_tmp = %p", pmem_tmp);
+
+  if(port == PORT_INDEX_IN)
+  {
+    dev_buffer.pbuffer = (OMX_U8 *)pmem_tmp->buffer;
+    dev_buffer.fd  = pmem_tmp->fd;
+    dev_buffer.maped_size = pmem_tmp->size;
+    dev_buffer.nsize = pmem_tmp->size;
+    dev_buffer.offset = pmem_tmp->offset;
+    ioctl_msg.inputparam  = (void*)&dev_buffer;
+    ioctl_msg.outputparam = NULL;
+
+    DEBUG_PRINT_LOW("\n venc_free_buf:pbuffer = %x,fd = %x, offset = %d, maped_size = %d", \
+                dev_buffer.pbuffer, \
+                dev_buffer.fd, \
+                dev_buffer.offset, \
+                dev_buffer.maped_size);
+
+    if(ioctl (m_nDriver_fd,VEN_IOCTL_CMD_FREE_INPUT_BUFFER,&ioctl_msg) < 0)
+    {
+      DEBUG_PRINT_ERROR("\nERROR: venc_free_buf: free input buffer failed ");
+      return false;
+    }
+  }
+  else if(port == PORT_INDEX_OUT)
+  {
+    dev_buffer.pbuffer = (OMX_U8 *)pmem_tmp->buffer;
+    dev_buffer.fd  = pmem_tmp->fd;
+    dev_buffer.nsize = pmem_tmp->size;
+    dev_buffer.maped_size = pmem_tmp->size;
+    dev_buffer.offset = pmem_tmp->offset;
+    ioctl_msg.inputparam  = (void*)&dev_buffer;
+    ioctl_msg.outputparam = NULL;
+
+    DEBUG_PRINT_LOW("\n venc_free_buf:pbuffer = %x,fd = %x, offset = %d, maped_size = %d", \
+                dev_buffer.pbuffer, \
+                dev_buffer.fd, \
+                dev_buffer.offset, \
+                dev_buffer.maped_size);
+
+    if(ioctl (m_nDriver_fd,VEN_IOCTL_CMD_FREE_OUTPUT_BUFFER,&ioctl_msg) < 0)
+    {
+      DEBUG_PRINT_ERROR("\nERROR: venc_free_buf: free output buffer failed ");
+      return false;
+    }
+  }
+  else
+  {
+    DEBUG_PRINT_ERROR("\nERROR: venc_free_buf:Invalid Port Index ");
+    return false;
+  }
+
+  return true;
+}
 
 bool venc_dev::venc_empty_buf(void *buffer, void *pmem_data_buf)
 {

@@ -1073,62 +1073,78 @@ void parseArgs(int argc, char** argv)
             strcmp("file", argv[1]) == 0)
    {//263
       m_eMode = MODE_FILE_ENCODE;
-      if ((argc == 11))
+
+      if(argc < 9 || argc > 11)
       {
-        m_sProfile.eControlRate = OMX_Video_ControlRateVariable;
-         int RC = atoi(argv[9]);
-
-         switch (RC)
-         {
-         case 0:
-            m_sProfile.eControlRate  = OMX_Video_ControlRateDisable ;//VENC_RC_NONE
-            break;
-         case 1:
-            m_sProfile.eControlRate  = OMX_Video_ControlRateConstant;//VENC_RC_CBR_CFR
-            break;
-
-         case 2:
-            m_sProfile.eControlRate  = OMX_Video_ControlRateConstantSkipFrames;//VENC_RC_CBR_VFR
-            break;
-
-         case 3:
-            m_sProfile.eControlRate  =OMX_Video_ControlRateVariable ;//VENC_RC_VBR_CFR
-            break;
-
-         case 4:
-            m_sProfile.eControlRate  = OMX_Video_ControlRateVariableSkipFrames;//VENC_RC_VBR_VFR
-            break;
-
-        default:
-            E("invalid rate control selection");
-            m_sProfile.eControlRate = OMX_Video_ControlRateVariable; //VENC_RC_VBR_CFR
-            break;
-         }
-         E("\nSetting AVCSliceMode ... ");
-         int AVCSliceMode = atoi(argv[10]);
-         switch(AVCSliceMode)
-         {
-         case 0:
-            m_sProfile.eSliceMode = OMX_VIDEO_SLICEMODE_AVCDefault;
-            break;
-
-         case 1:
-            m_sProfile.eSliceMode = OMX_VIDEO_SLICEMODE_AVCMBSlice;
-            break;
-
-         case 2:
-            m_sProfile.eSliceMode = OMX_VIDEO_SLICEMODE_AVCByteSlice;
-            break;
-
-         default:
-            E("invalid Slice Mode");
-            m_sProfile.eSliceMode = OMX_VIDEO_SLICEMODE_AVCDefault;
-            break;
-        }
+          usage(argv[0]);
       }
       else
       {
-          usage(argv[0]);
+         if ((argc == 10))
+         {
+           m_sProfile.eControlRate = OMX_Video_ControlRateVariable;
+            int RC = atoi(argv[9]);
+
+            switch (RC)
+            {
+            case 0:
+               m_sProfile.eControlRate  = OMX_Video_ControlRateDisable ;//VENC_RC_NONE
+               break;
+            case 1:
+               m_sProfile.eControlRate  = OMX_Video_ControlRateConstant;//VENC_RC_CBR_CFR
+               break;
+
+            case 2:
+               m_sProfile.eControlRate  = OMX_Video_ControlRateConstantSkipFrames;//VENC_RC_CBR_VFR
+               break;
+
+            case 3:
+               m_sProfile.eControlRate  =OMX_Video_ControlRateVariable ;//VENC_RC_VBR_CFR
+               break;
+
+            case 4:
+               m_sProfile.eControlRate  = OMX_Video_ControlRateVariableSkipFrames;//VENC_RC_VBR_VFR
+               break;
+
+           default:
+               E("invalid rate control selection");
+               m_sProfile.eControlRate = OMX_Video_ControlRateVariable; //VENC_RC_VBR_CFR
+               break;
+            }
+         }
+
+         if (argc == 11)
+         {
+            if(!strcmp(argv[3], "H264") || !strcmp(argv[3], "h264"))
+            {
+               E("\nSetting AVCSliceMode ... ");
+               int AVCSliceMode = atoi(argv[10]);
+               switch(AVCSliceMode)
+               {
+               case 0:
+                  m_sProfile.eSliceMode = OMX_VIDEO_SLICEMODE_AVCDefault;
+                  break;
+
+               case 1:
+                  m_sProfile.eSliceMode = OMX_VIDEO_SLICEMODE_AVCMBSlice;
+                  break;
+
+               case 2:
+                  m_sProfile.eSliceMode = OMX_VIDEO_SLICEMODE_AVCByteSlice;
+                  break;
+
+               default:
+                  E("invalid Slice Mode");
+                  m_sProfile.eSliceMode = OMX_VIDEO_SLICEMODE_AVCDefault;
+                  break;
+              }
+            }
+            else
+            {
+               E("SliceMode support only for H.264 codec");
+               usage(argv[0]);
+            }
+         }
       }
       m_sProfile.cInFileName = argv[7];
       m_sProfile.cOutFileName = argv[8];
