@@ -915,14 +915,29 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
 
   if (eRet == OMX_ErrorNone)
   {
-    if (codec_type_parse == 1)
-    {
-      driver_context.video_resoultion.frame_height = 288;
-      driver_context.video_resoultion.frame_width = 352;
-      driver_context.video_resoultion.stride = 352;
-      driver_context.video_resoultion.scan_lines = 288;
-    }
     driver_context.output_format = VDEC_YUV_FORMAT_NV12;
+
+    if  (is_fluid) {
+
+         FILE * pFile;
+         char disable_overlay = '0';
+         pFile = fopen
+         ("/data/data/com.arcsoft.videowall/files/disableoverlay.txt", "rb" );
+         if (pFile == NULL) {
+           DEBUG_PRINT_HIGH(" fopen FAiLED  for disableoverlay.txt\n");
+         } else {
+            int count  = fread(&disable_overlay, 1, 1, pFile);
+            fclose(pFile);
+         }
+
+         if(disable_overlay == '1') {
+             DEBUG_PRINT_HIGH(" vdec : TILE format \n");
+             driver_context.output_format = VDEC_YUV_FORMAT_TILE_4x2;
+         } else {
+             DEBUG_PRINT_HIGH("  vdec : NV 12 format \n");
+             driver_context.output_format = VDEC_YUV_FORMAT_NV12;
+         }
+      }
 
     /*Initialize Decoder with codec type and resolution*/
     ioctl_msg.inputparam = &driver_context.decoder_format;
@@ -981,7 +996,7 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
     m_inp_buf_count = driver_context.input_buffer.actualcount;
     buffer_size = driver_context.input_buffer.buffer_size;
     alignment = driver_context.input_buffer.alignment;
-    m_inp_buf_size = (buffer_size + alignment) & (~alignment);
+    m_inp_buf_size = ((buffer_size + alignment -1 ) & (~(alignment -1)));
     m_inp_buf_count_min = driver_context.input_buffer.mincount;
 
     /*Get the Buffer requirements for input and output ports*/
@@ -1018,7 +1033,8 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
 
     alignment = driver_context.output_buffer.alignment;
     buffer_size = driver_context.output_buffer.buffer_size;
-    m_out_buf_size_recon = m_out_buf_size = (buffer_size + alignment) & (~alignment);
+    m_out_buf_size_recon = m_out_buf_size =
+      ((buffer_size + alignment - 1) & (~(alignment -1)));
 
     scan_lines = m_crop_dy = m_height = 720;
     stride = m_crop_dx = m_width = 1280;
@@ -2108,13 +2124,12 @@ OMX_ERRORTYPE  omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE     hComp,
       {
         if (0 == portFmt->nIndex)
         {
-           portFmt->eColorFormat = OMX_COLOR_FormatYUV420SemiPlanar;
+           if (driver_context.output_format == VDEC_YUV_FORMAT_NV12)
+             portFmt->eColorFormat = OMX_COLOR_FormatYUV420SemiPlanar;
+           else
+            portFmt->eColorFormat = (OMX_COLOR_FORMATTYPE)0x7F000000;
+
            portFmt->eCompressionFormat =  OMX_VIDEO_CodingUnused;
-        }
-        else if (1 == portFmt->nIndex)
-        {
-           portFmt->eColorFormat = OMX_COLOR_FormatYUV420SemiPlanar;
-           portFmt->eCompressionFormat = OMX_VIDEO_CodingUnused;
         }
         else
         {
@@ -2399,7 +2414,8 @@ OMX_ERRORTYPE  omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE     hComp,
 
                alignment = driver_context.output_buffer.alignment;
                buffer_size = driver_context.output_buffer.buffer_size;
-               m_out_buf_size_recon = m_out_buf_size = (buffer_size + alignment) & (~alignment);
+               m_out_buf_size_recon = m_out_buf_size =
+                 ((buffer_size + alignment - 1) & (~(alignment - 1)));
            }
         }
         else
@@ -2974,6 +2990,14 @@ OMX_ERRORTYPE  omx_vdec::use_input_buffer(
       }
     }
 
+    if(!align_pmem_buffers(pmem_fd, m_inp_buf_size,
+      driver_context.input_buffer.alignment))
+    {
+      DEBUG_PRINT_ERROR("\n align_pmem_buffers() failed");
+      close(pmem_fd);
+      return OMX_ErrorInsufficientResources;
+    }
+
     buf_addr = (unsigned char *)mmap(NULL,m_inp_buf_size,PROT_READ|PROT_WRITE,
                     MAP_SHARED,pmem_fd,0);
 
@@ -3186,6 +3210,14 @@ OMX_ERRORTYPE  omx_vdec::use_output_buffer(
         {
           return OMX_ErrorInsufficientResources;
         }
+      }
+
+      if(!align_pmem_buffers(driver_context.ptr_outputbuffer[i].pmem_fd,
+        m_out_buf_size, driver_context.output_buffer.alignment))
+      {
+        DEBUG_PRINT_ERROR("\n align_pmem_buffers() failed");
+        close(driver_context.ptr_outputbuffer[i].pmem_fd);
+        return OMX_ErrorInsufficientResources;
       }
 
       driver_context.ptr_outputbuffer[i].bufferaddr =
@@ -3593,6 +3625,14 @@ OMX_ERRORTYPE  omx_vdec::allocate_input_buffer(
       }
     }
 
+    if(!align_pmem_buffers(pmem_fd, m_inp_buf_size,
+      driver_context.input_buffer.alignment))
+    {
+      DEBUG_PRINT_ERROR("\n align_pmem_buffers() failed");
+      close(pmem_fd);
+      return OMX_ErrorInsufficientResources;
+    }
+
     buf_addr = (unsigned char *)mmap(NULL,m_inp_buf_size,PROT_READ|PROT_WRITE,
                     MAP_SHARED,pmem_fd,0);
 
@@ -3718,6 +3758,14 @@ OMX_ERRORTYPE  omx_vdec::allocate_output_buffer(
         DEBUG_PRINT_ERROR("\nERROR:pmem fd for output buffer %d",m_out_buf_size);
         return OMX_ErrorInsufficientResources;
       }
+    }
+
+    if(!align_pmem_buffers(pmem_fd, m_out_buf_size * m_out_buf_count,
+      driver_context.output_buffer.alignment))
+    {
+      DEBUG_PRINT_ERROR("\n align_pmem_buffers() failed");
+      close(pmem_fd);
+      return OMX_ErrorInsufficientResources;
     }
 
     pmem_baseaddress = (unsigned char *)mmap(NULL,(m_out_buf_size * m_out_buf_count),
@@ -5100,7 +5148,8 @@ OMX_ERRORTYPE omx_vdec::omx_vdec_check_port_settings(bool *port_setting_changed)
 
       alignment = driver_context.output_buffer.alignment;
       buffer_size = driver_context.output_buffer.buffer_size;
-      m_out_buf_size_recon = (buffer_size + alignment) & (~alignment);
+      m_out_buf_size_recon =
+        ((buffer_size + alignment - 1) & (~(alignment - 1)));
       m_crop_dy = m_height      = driver_context.video_resoultion.frame_height;
       m_crop_dx = m_width       = driver_context.video_resoultion.frame_width;
       scan_lines = driver_context.video_resoultion.scan_lines;
@@ -5923,3 +5972,22 @@ bool omx_vdec::register_output_buffers()
   }
   return true;
 }
+
+bool omx_vdec::align_pmem_buffers(int pmem_fd, OMX_U32 buffer_size,
+                                  OMX_U32 alignment)
+{
+  struct pmem_allocation allocation;
+  allocation.size = buffer_size;
+  allocation.align = clip2(alignment);
+  if (allocation.align < 4096)
+  {
+    allocation.align = 4096;
+  }
+  if (ioctl(pmem_fd, PMEM_ALLOCATE_ALIGNED, &allocation) < 0)
+  {
+    DEBUG_PRINT_ERROR("\n Aligment failed with pmem driver");
+    return false;
+  }
+  return true;
+}
+
