@@ -1234,6 +1234,18 @@ OMX_ERRORTYPE Venc::translate_driver_error(int driverResult)
   return result;
 }
 
+OMX_ERRORTYPE Venc::is_multi_slice_mode_supported()
+{
+  OMX_ERRORTYPE ret = OMX_ErrorNone;
+  if(!strncmp(m_pComponentName,"OMX.qcom.video.encoder.avc",strlen("OMX.qcom.video.encoder.avc"))
+	&& m_sInPortDef.format.video.nFrameHeight * m_sInPortDef.format.video.nFrameWidth <= (VEN_VGA_DX * VEN_VGA_DY / 2) ) {
+	  ret = OMX_ErrorNone;
+  } else {
+	  ret = OMX_ErrorUnsupportedSetting;
+  }
+  return ret;
+}
+
 OMX_ERRORTYPE Venc::driver_set_default_config()
 {
   OMX_ERRORTYPE result = OMX_ErrorNone;
@@ -1345,18 +1357,18 @@ OMX_ERRORTYPE Venc::driver_set_default_config()
   // set slice config
   ////////////////////////////////////////
 
-  /* if (result == OMX_ErrorNone)
-     {
+   if (result == OMX_ErrorNone)
+   {
      struct ven_multi_slice_cfg slice;
-     slice.mslice_mode = VEN_MSLICE_OFF; // default to no slicing
+     slice.mslice_mode = VENC_SLICE_MODE_DEFAULT; // default to no slicing
      slice.mslice_size = 0;
      rc = ven_set_multislice_cfg(m_pDevice, &slice);
      if(rc)
      {
-     QC_OMX_MSG_ERROR("failed to set slice config");
-     result = translate_driver_error(GetLastError());
+       QC_OMX_MSG_ERROR("failed to set slice config");
+       result = translate_driver_error(GetLastError());
      }
-     } */
+   }
 
   ////////////////////////////////////////
   // set rotation
@@ -2222,17 +2234,18 @@ OMX_ERRORTYPE Venc::update_param_err_correct(OMX_IN OMX_VIDEO_PARAM_ERRORCORRECT
       // set slice config
       ////////////////////////////////////////
       int nOutSize;
-      {
-        struct ven_multi_slice_cfg slice;
-        slice.mslice_mode = pParam->bEnableResync == OMX_TRUE ? VEN_MSLICE_CNT_BYTE : VEN_MSLICE_OFF;
-        slice.mslice_size = pParam->nResynchMarkerSpacing / 8; // convert from bits to bytes
-
-        rc = ven_set_multislice_cfg(m_pDevice, &slice);
-        if(rc)
-        {
-          QC_OMX_MSG_ERROR("failed to set slice config");
-          result = translate_driver_error(GetLastError());
-        }
+      if(pParam->bEnableResync) {
+	result = is_multi_slice_mode_supported();
+	if(OMX_ErrorNone == result) {
+          struct ven_multi_slice_cfg slice;
+          slice.mslice_mode = pParam->bEnableResync == OMX_TRUE ? VENC_SLICE_MODE_BIT : VENC_SLICE_MODE_DEFAULT;
+          slice.mslice_size = pParam->nResynchMarkerSpacing;
+	  rc = ven_set_multislice_cfg(m_pDevice, &slice);
+	  if(rc) {
+	    QC_OMX_MSG_ERROR("failed to set slice config");
+	    result = translate_driver_error(GetLastError());
+	  }
+	}
       }
 
       ////////////////////////////////////////
@@ -2335,18 +2348,19 @@ OMX_ERRORTYPE Venc::update_param_h263(OMX_IN OMX_VIDEO_PARAM_H263TYPE* pParam)
       ////////////////////////////////////////
       // set slice
       ////////////////////////////////////////
-      if (result == OMX_ErrorNone)
+      if (result == OMX_ErrorNone && pParam->nGOBHeaderInterval)
       {
-        struct ven_multi_slice_cfg slice;
-        slice.mslice_mode = pParam->nGOBHeaderInterval == 0 ? VEN_MSLICE_OFF : VEN_MSLICE_GOB;
-        slice.mslice_size = pParam->nGOBHeaderInterval;
-
-        rc = ven_set_multislice_cfg(m_pDevice, &slice);
-        if(rc)
-        {
-          QC_OMX_MSG_ERROR("failed to set slice config");
-          result = translate_driver_error(GetLastError());
-        }
+	result = is_multi_slice_mode_supported();
+	if(OMX_ErrorNone == result) {
+          struct ven_multi_slice_cfg slice;
+          slice.mslice_mode = pParam->nGOBHeaderInterval == 0 ? VENC_SLICE_MODE_DEFAULT : VENC_SLICE_MODE_GOB;
+          slice.mslice_size = pParam->nGOBHeaderInterval;
+          rc = ven_set_multislice_cfg(m_pDevice, &slice);
+          if(rc) {
+            QC_OMX_MSG_ERROR("failed to set slice config");
+            result = translate_driver_error(GetLastError());
+          }
+	}
       }
 
       if (result == OMX_ErrorNone)
@@ -2429,18 +2443,20 @@ OMX_ERRORTYPE Venc::update_param_avc(OMX_IN OMX_VIDEO_PARAM_AVCTYPE* pParam)
       ////////////////////////////////////////
       // set slice
       ////////////////////////////////////////
-      if (result == OMX_ErrorNone)
+      if (result == OMX_ErrorNone && pParam->nSliceHeaderSpacing)
       {
-        struct ven_multi_slice_cfg slice;
-        slice.mslice_mode = pParam->nSliceHeaderSpacing == 0 ? VEN_MSLICE_OFF : VEN_MSLICE_CNT_MB;
-        slice.mslice_size = pParam->nSliceHeaderSpacing;
-
-        rc = ven_set_multislice_cfg(m_pDevice, &slice);
-        if(rc)
-        {
-          QC_OMX_MSG_ERROR("failed to set slice config");
-          result = translate_driver_error(GetLastError());
-        }
+	result = is_multi_slice_mode_supported();
+	if(OMX_ErrorNone == result) {
+          struct ven_multi_slice_cfg slice;
+          slice.mslice_mode = pParam->nSliceHeaderSpacing == 0 ? VENC_SLICE_MODE_DEFAULT : VENC_SLICE_MODE_MB;
+          slice.mslice_size = pParam->nSliceHeaderSpacing;
+          rc = ven_set_multislice_cfg(m_pDevice, &slice);
+          if(rc)
+          {
+            QC_OMX_MSG_ERROR("failed to set slice config");
+            result = translate_driver_error(GetLastError());
+          }
+	}
       }
 
       if (result == OMX_ErrorNone)
@@ -3060,7 +3076,6 @@ OMX_ERRORTYPE Venc::update_config_qp_range(OMX_IN  QOMX_VIDEO_TEMPORALSPATIALTYP
 }
 #endif
 
-
 OMX_ERRORTYPE Venc::update_config_nal_size(OMX_IN  OMX_VIDEO_CONFIG_NALSIZE* pConfig)
 {
   OMX_ERRORTYPE result = OMX_ErrorNone;
@@ -3070,20 +3085,22 @@ OMX_ERRORTYPE Venc::update_config_nal_size(OMX_IN  OMX_VIDEO_CONFIG_NALSIZE* pCo
   {
     if (pConfig->nPortIndex == (OMX_U32) PORT_INDEX_OUT)
     {
-      int nOutSize;
-      struct ven_multi_slice_cfg slice;
-      slice.mslice_mode = VEN_MSLICE_CNT_BYTE;
-      slice.mslice_size = (unsigned long) pConfig->nNaluBytes;
-
-      rc = ven_set_multislice_cfg(m_pDevice, &slice);
-      if(rc)
-      {
-        QC_OMX_MSG_ERROR("failed to set slice config");
-        result = translate_driver_error(GetLastError());
-      }
-      else
-      {
-        memcpy(&m_sConfigNAL, pConfig, sizeof(m_sConfigNAL));
+      result = is_multi_slice_mode_supported();
+      if(OMX_ErrorNone == result) {
+        int nOutSize;
+        struct ven_multi_slice_cfg slice;
+        slice.mslice_mode = VENC_SLICE_MODE_BIT;
+	slice.mslice_size = (unsigned long) pConfig->nNaluBytes * 8;
+        rc = ven_set_multislice_cfg(m_pDevice, &slice);
+	if(rc)
+	{
+	  QC_OMX_MSG_ERROR("failed to set slice config");
+	  result = translate_driver_error(GetLastError());
+	}
+	else
+	{
+	  memcpy(&m_sConfigNAL, pConfig, sizeof(m_sConfigNAL));
+	}
       }
     }
     else
@@ -3707,7 +3724,11 @@ OMX_ERRORTYPE Venc::allocate_q6_buffers(struct venc_buffers *pbufs)
 
   width = m_sOutPortDef.format.video.nFrameWidth;
   height = m_sOutPortDef.format.video.nFrameHeight;
-  nCmdSize = width * height * 3 / 2;
+  if(OMX_ErrorNone != is_multi_slice_mode_supported()) {
+    nCmdSize = width * height * 3 / 2;
+  } else {
+    nCmdSize = width * height * 4;
+  }
   nVlcSize = 3072 * width / 16;
   nReconSize = nWbSize = (((width + 31) >> 5) << 5) * height * 3 / 2;
   // allocate recon buffers

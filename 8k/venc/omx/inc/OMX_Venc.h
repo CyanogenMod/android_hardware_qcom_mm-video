@@ -319,7 +319,7 @@ class Venc : public qc_omx_component
      *************************************************************************/
     void process_driver_msg(struct venc_msg* pMsg);
 
-
+    OMX_ERRORTYPE is_multi_slice_mode_supported();
     // driver status messages
     void process_status_input_buffer_done(void* pData, unsigned long nStatus);
     void process_status_output_buffer_done(void* pData, unsigned long nStatus);
