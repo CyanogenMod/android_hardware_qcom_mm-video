@@ -965,10 +965,18 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
       eRet = OMX_ErrorInsufficientResources;
     }
 
+#ifdef MAX_RES_720P
     driver_context.video_resoultion.frame_height = 720;
     driver_context.video_resoultion.frame_width = 1280;
     driver_context.video_resoultion.stride = 1280;
     driver_context.video_resoultion.scan_lines = 720;
+#endif
+#ifdef MAX_RES_1080P
+    driver_context.video_resoultion.frame_height = 1088;
+    driver_context.video_resoultion.frame_width = 1920;
+    driver_context.video_resoultion.stride = 1920;
+    driver_context.video_resoultion.scan_lines = 1088;
+#endif
 
     ioctl_msg.inputparam = &driver_context.video_resoultion;
     ioctl_msg.outputparam = NULL;
@@ -1036,9 +1044,14 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
     buffer_size = driver_context.output_buffer.buffer_size;
     m_out_buf_size_recon = m_out_buf_size =
       ((buffer_size + alignment - 1) & (~(alignment -1)));
-
+#ifdef MAX_RES_720P
     scan_lines = m_crop_dy = m_height = 720;
     stride = m_crop_dx = m_width = 1280;
+#endif
+#ifdef MAX_RES_1080P
+    scan_lines = m_crop_dy = m_height = 1088;
+    stride = m_crop_dx = m_width = 1920;
+#endif
     m_port_height             = m_height;
     m_port_width              = m_width;
     m_state                   = OMX_StateLoaded;

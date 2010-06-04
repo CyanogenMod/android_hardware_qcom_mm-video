@@ -50,6 +50,12 @@ libOmxVdec-def += -UENABLE_DEBUG_LOW
 libOmxVdec-def += -DENABLE_DEBUG_HIGH
 libOmxVdec-def += -DENABLE_DEBUG_ERROR
 libOmxVdec-def += -UMULTI_DEC_INST
+ifeq "$(findstring msm7630,$(TARGET_PRODUCT))" "msm7630"
+libOmxVdec-def += -DMAX_RES_720P
+endif
+ifeq "$(findstring msm8660,$(TARGET_PRODUCT))" "msm8660"
+libOmxVdec-def += -DMAX_RES_1080P
+endif
 # ---------------------------------------------------------------------------------
 # 			Make the Shared library (libOmxVdec)
 # ---------------------------------------------------------------------------------
