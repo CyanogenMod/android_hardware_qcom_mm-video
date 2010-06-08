@@ -61,6 +61,8 @@ char outputfilename [] = "/data/output.yuv";
 
 #define MPEG4_SUPPORTED_WIDTH (480)
 #define MPEG4_SUPPORTED_HEIGHT (368)
+#define DEFAULT_FPS 30
+#define MAX_SUPPORTED_FPS 120
 
 #define VC1_SP_MP_START_CODE        0xC5000000
 #define VC1_SP_MP_START_CODE_MASK   0xFF000000
@@ -301,7 +303,11 @@ omx_vdec::omx_vdec(): m_state(OMX_StateInvalid),
                       scan_lines(0),
                       m_error_propogated(false),
                       m_device_file_ptr(NULL),
-                      m_vc1_profile((vc1_profile_type)0)
+                      m_vc1_profile((vc1_profile_type)0),
+                      valid_prev_ts(false),
+                      prev_frame_ts(0),
+                      frame_interval(~((unsigned int)0)),
+                      frame_rate(DEFAULT_FPS)
 {
   /* Assumption is that , to begin with , we have all the frames with decoder */
   DEBUG_PRINT_HIGH("\n In OMX vdec Constuctor");
@@ -888,6 +894,16 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
     strcat(inputfilename, "263");
 #endif
   }
+  else if(!strncmp(driver_context.kind, "OMX.qcom.video.decoder.divx",\
+         OMX_MAX_STRINGNAME_SIZE))
+  {
+     strncpy((char *)m_cRole, "video_decoder.divx",OMX_MAX_STRINGNAME_SIZE);
+     DEBUG_PRINT_LOW ("\n DIVX Decoder selected");
+     driver_context.decoder_format = VDEC_CODECTYPE_DIVX_5;
+     eCompressionFormat = (OMX_VIDEO_CODINGTYPE)QOMX_VIDEO_CodingDivx;
+     codec_type_parse = CODEC_TYPE_DIVX;
+     m_frame_parser.init_start_codes (codec_type_parse);
+  }
   else if(!strncmp(driver_context.kind, "OMX.qcom.video.decoder.avc",\
          OMX_MAX_STRINGNAME_SIZE))
   {
@@ -1353,7 +1369,7 @@ OMX_ERRORTYPE  omx_vdec::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
          else
          {
            BITMASK_SET(&m_flags,OMX_COMPONENT_PAUSE_PENDING);
-           DEBUG_PRINT_LOW("send_command_proxy(): Idle-->Executing\n");
+           DEBUG_PRINT_LOW("send_command_proxy(): Idle-->Pause\n");
            bFlag = 0;
          }
       }
@@ -1768,6 +1784,7 @@ bool omx_vdec::execute_omx_flush(OMX_U32 flushType)
     //flush output only
     output_flush_progress = true;
     bRet = execute_output_flush(flushType);
+    valid_prev_ts = false;
   }
 
   if(flushType == OMX_ALL)
@@ -2051,7 +2068,7 @@ OMX_ERRORTYPE  omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE     hComp,
         portDefn->format.video.nFrameWidth  =  m_crop_dx;
         portDefn->format.video.nStride = m_width;
         portDefn->format.video.nSliceHeight = m_height;
-        portDefn->format.video.xFramerate= 25;
+        portDefn->format.video.xFramerate = frame_rate;
 
       if (0 == portDefn->nPortIndex)
       {
@@ -2355,6 +2372,16 @@ OMX_ERRORTYPE  omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE     hComp,
       {
          return OMX_ErrorUnsupportedSetting;
       }
+
+      if(portDefn->format.video.xFramerate &&
+         portDefn->format.video.xFramerate <= MAX_SUPPORTED_FPS)
+      {
+          frame_rate = portDefn->format.video.xFramerate;
+          frame_interval = 1e6/frame_rate;
+          DEBUG_PRINT_HIGH("\n[OMX_VDEC] frame_rate[%u] frame_interval[%u]",
+            frame_rate, frame_interval);
+      }
+
       if(OMX_DirOutput == portDefn->eDir)
       {
           if ( portDefn->nBufferCountActual < m_out_buf_count_min ||
@@ -2589,6 +2616,18 @@ OMX_ERRORTYPE  omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE     hComp,
               if(!strncmp((const char*)comp_role->cRole,"video_decoder.h263",OMX_MAX_STRINGNAME_SIZE))
               {
                   strncpy((char*)m_cRole,"video_decoder.h263",OMX_MAX_STRINGNAME_SIZE);
+              }
+              else
+              {
+                  DEBUG_PRINT_ERROR("Setparameter: unknown Index %s\n", comp_role->cRole);
+                  eRet =OMX_ErrorUnsupportedSetting;
+              }
+          }
+          else if(!strncmp(driver_context.kind, "OMX.qcom.video.decoder.divx",OMX_MAX_STRINGNAME_SIZE))
+          {
+              if(!strncmp((const char*)comp_role->cRole,"video_decoder.divx",OMX_MAX_STRINGNAME_SIZE))
+              {
+                  strncpy((char*)m_cRole,"video_decoder.divx",OMX_MAX_STRINGNAME_SIZE);
               }
               else
               {
@@ -4879,6 +4918,19 @@ OMX_ERRORTYPE  omx_vdec::component_role_enum(OMX_IN OMX_HANDLETYPE hComp,
       eRet = OMX_ErrorNoMore;
     }
   }
+  else if(!strncmp(driver_context.kind, "OMX.qcom.video.decoder.divx",OMX_MAX_STRINGNAME_SIZE))
+  {
+    if((0 == index) && role)
+    {
+      strncpy((char *)role, "video_decoder.divx",OMX_MAX_STRINGNAME_SIZE);
+      DEBUG_PRINT_LOW("component_role_enum: role %s\n",role);
+    }
+    else
+    {
+      DEBUG_PRINT_LOW("\n No more roles \n");
+      eRet = OMX_ErrorNoMore;
+    }
+  }
   else if(!strncmp(driver_context.kind, "OMX.qcom.video.decoder.avc",OMX_MAX_STRINGNAME_SIZE))
   {
     if((0 == index) && role)
@@ -5430,6 +5482,23 @@ int omx_vdec::async_message_process (void *context, void* message)
     {
       if (vdec_msg->msgdata.output_frame.len <=  omxhdr->nAllocLen)
       {
+        if (omx->arbitrary_bytes ||
+            omx->eCompressionFormat == QOMX_VIDEO_CodingDivx)
+        {
+          if (omx->valid_prev_ts) {
+            if (vdec_msg->msgdata.output_frame.time_stamp <= omx->prev_frame_ts)
+              vdec_msg->msgdata.output_frame.time_stamp = omx->prev_frame_ts + omx->frame_interval;
+            else if ((vdec_msg->msgdata.output_frame.time_stamp - omx->prev_frame_ts) < omx->frame_interval)
+            {
+              omx->frame_interval = vdec_msg->msgdata.output_frame.time_stamp - omx->prev_frame_ts;
+              omx->frame_rate = 1e6 / omx->frame_interval;
+              DEBUG_PRINT_HIGH("\n[OMX_VDEC] frame_interval(%u) frame_rate(%u)", omx->frame_interval, omx->frame_rate);
+            }
+          }
+          omx->prev_frame_ts = vdec_msg->msgdata.output_frame.time_stamp;
+          omx->valid_prev_ts = true;
+        }
+
         omxhdr->nFilledLen = vdec_msg->msgdata.output_frame.len;
         omxhdr->nOffset = vdec_msg->msgdata.output_frame.offset;
         omxhdr->nTimeStamp = vdec_msg->msgdata.output_frame.time_stamp;
@@ -5486,6 +5555,7 @@ int omx_vdec::async_message_process (void *context, void* message)
   case VDEC_MSG_EVT_CONFIG_CHANGED:
     DEBUG_PRINT_HIGH("\n Port settings changed");
     omx->omx_vdec_check_port_settings();
+    omx->execute_omx_flush(OMX_CORE_OUTPUT_PORT_INDEX);
     omx->post_event ((unsigned int)omxhdr,vdec_msg->status_code,
                      OMX_COMPONENT_GENERATE_PORT_RECONFIG);
     break;
