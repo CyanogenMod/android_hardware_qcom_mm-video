@@ -219,7 +219,13 @@ int init_decoder ( struct video_decoder_context *init_decode )
 {
   struct vdec_ioctl_msg ioctl_msg = {NULL,NULL};
   struct video_queue_context *queue_ptr = NULL;
+#ifdef MAX_RES_720P
   enum vdec_output_fromat output_format = VDEC_YUV_FORMAT_NV12;
+#endif
+#ifdef MAX_RES_1080P
+  enum vdec_output_fromat output_format  = VDEC_YUV_FORMAT_TILE_4x2;
+#endif
+
   pthread_mutexattr_t init_values;
 
   DEBUG_PRINT("\n Before calling the open");

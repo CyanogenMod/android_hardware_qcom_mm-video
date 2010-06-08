@@ -907,8 +907,8 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
 
   if (eRet == OMX_ErrorNone)
   {
+#ifdef MAX_RES_720P
     driver_context.output_format = VDEC_YUV_FORMAT_NV12;
-
     if  (is_fluid) {
 
          FILE * pFile;
@@ -930,7 +930,10 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
              driver_context.output_format = VDEC_YUV_FORMAT_NV12;
          }
       }
-
+#endif
+#ifdef MAX_RES_1080P
+    driver_context.output_format = VDEC_YUV_FORMAT_TILE_4x2;
+#endif
     /*Initialize Decoder with codec type and resolution*/
     ioctl_msg.inputparam = &driver_context.decoder_format;
     ioctl_msg.outputparam = NULL;

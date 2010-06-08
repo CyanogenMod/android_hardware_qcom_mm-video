@@ -2364,7 +2364,12 @@ void overlay_set()
     overlayp = &overlay;
     overlayp->src.width  = stride;
     overlayp->src.height = sliceheight;
+#ifdef MAX_RES_720P
     overlayp->src.format = MDP_Y_CRCB_H2V2;
+#endif
+#ifdef MAX_RES_1080P
+    overlayp->src.format = MDP_Y_CRCB_H2V2_TILE;
+#endif
     overlayp->src_rect.x = 0;
     overlayp->src_rect.y = 0;
     overlayp->src_rect.w = width;
