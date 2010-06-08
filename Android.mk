@@ -38,3 +38,8 @@ ifeq "$(findstring msm7630,$(TARGET_PRODUCT))" "msm7630"
     include $(OMX_VIDEO_PATH)/vidc/vdec/Android.mk
     include $(OMX_VIDEO_PATH)/vidc/venc/Android.mk
 endif
+
+ifeq "$(findstring msm8660,$(TARGET_PRODUCT))" "msm8660"
+    include $(OMX_VIDEO_PATH)/vidc/vdec/Android.mk
+    include $(OMX_VIDEO_PATH)/vidc/venc/Android.mk
+endif
