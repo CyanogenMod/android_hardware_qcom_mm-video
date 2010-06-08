@@ -200,7 +200,7 @@ static int ven_set_default_config(struct ven_device *dvenc)
   pconfig->rate_control.rc_mode = VEN_RC_VBR_CFR;
 
   // disable slicing
-  pconfig->multi_slice.mslice_mode = VEN_MSLICE_OFF;
+  pconfig->multi_slice.mslice_mode = VENC_SLICE_MODE_DEFAULT;
   pconfig->multi_slice.mslice_size = 0;
 
   // no rotation
@@ -251,7 +251,7 @@ static void ven_change_codec(struct ven_device * dvenc)
     pconfig->qp_range.min_qp = 2;
     pconfig->qp_range.max_qp = 31;
 
-    pconfig->multi_slice.mslice_mode = VEN_MSLICE_OFF;
+    pconfig->multi_slice.mslice_mode = VENC_SLICE_MODE_DEFAULT;
     pconfig->multi_slice.mslice_size = 0;
 
     pconfig->profile.profile = VEN_PROFILE_MPEG4_SP;
@@ -269,7 +269,7 @@ static void ven_change_codec(struct ven_device * dvenc)
     pconfig->qp_range.min_qp = 2;
     pconfig->qp_range.max_qp = 31;
 
-    pconfig->multi_slice.mslice_mode = VEN_MSLICE_OFF;
+    pconfig->multi_slice.mslice_mode = VENC_SLICE_MODE_DEFAULT;
     pconfig->multi_slice.mslice_size = 0;
 
     pconfig->profile.profile = VEN_PROFILE_H263_BASELINE;
@@ -288,7 +288,7 @@ static void ven_change_codec(struct ven_device * dvenc)
     pconfig->qp_range.min_qp = 2;
     pconfig->qp_range.max_qp = 51;
 
-    pconfig->multi_slice.mslice_mode = VEN_MSLICE_OFF;
+    pconfig->multi_slice.mslice_mode = VENC_SLICE_MODE_DEFAULT;
     pconfig->multi_slice.mslice_size = 0;
 
     pconfig->profile.profile = VEN_PROFILE_H264_BASELINE;
@@ -570,30 +570,6 @@ static int ven_translate_config(struct ven_config_type* psrc,
     }
   }
 
-  // resync marker (slice) config
-  if (psrc->multi_slice.mslice_mode == VEN_MSLICE_CNT_BYTE)
-  {
-    pcommon->slice_config.slice_mode = VENC_SLICE_MODE_BIT;
-    pcommon->slice_config.units_per_slice = psrc->multi_slice.mslice_size * 8;
-  }
-  else if (psrc->multi_slice.mslice_mode == VEN_MSLICE_GOB)
-  {
-    pcommon->slice_config.slice_mode = VENC_SLICE_MODE_GOB;
-    pcommon->slice_config.units_per_slice = psrc->multi_slice.mslice_size;
-  }
-  else if (psrc->multi_slice.mslice_mode == VEN_MSLICE_CNT_MB)
-  {
-    pcommon->slice_config.slice_mode = VENC_SLICE_MODE_MB;
-    pcommon->slice_config.units_per_slice = psrc->multi_slice.mslice_size;
-  }
-  else if (psrc->multi_slice.mslice_mode == VEN_MSLICE_OFF)
-  {
-    pcommon->slice_config.slice_mode = VENC_SLICE_MODE_DEFAULT;
-    pcommon->slice_config.units_per_slice = 0;
-  }
-
-  pcommon->slice_config.slice_mode = VENC_SLICE_MODE_DEFAULT;
-  pcommon->slice_config.units_per_slice = 0;
   pcommon->input_frame_width   = psrc->base_config.input_width;
   pcommon->input_frame_height  = psrc->base_config.input_height;
   pcommon->output_frame_width  = psrc->base_config.dvs_width;
