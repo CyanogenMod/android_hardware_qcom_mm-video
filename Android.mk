@@ -34,6 +34,11 @@ ifeq "$(findstring qsd8250,$(TARGET_PRODUCT))" "qsd8250"
     include $(OMX_VIDEO_PATH)/qdsp6/venc/Android.mk
 endif
 
+ifeq "$(findstring qsd8650a,$(TARGET_PRODUCT))" "qsd8650a"
+    include $(OMX_VIDEO_PATH)/qdsp6/vdec/Android.mk
+    include $(OMX_VIDEO_PATH)/qdsp6/venc/Android.mk
+endif
+
 ifeq "$(findstring msm7630,$(TARGET_PRODUCT))" "msm7630"
     include $(OMX_VIDEO_PATH)/vidc/vdec/Android.mk
     include $(OMX_VIDEO_PATH)/vidc/venc/Android.mk
