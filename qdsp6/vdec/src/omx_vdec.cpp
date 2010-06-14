@@ -7618,9 +7618,8 @@ OMX_ERRORTYPE omx_vdec::omx_vdec_check_port_settings(OMX_BUFFERHEADERTYPE *
 
          bInterlace = ((buf[9] & 0x40) ? true : false);
          QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW,
-                  "omx_vdec_check_port_settings - VC1 Advance profile Not supported, %d x %d\n",
+                  "omx_vdec_check_port_settings - VC1 Advance profile Width:%d x Height:%d\n",
                   width, height);
-         return OMX_ErrorStreamCorrupt;
       } else if(m_vendor_config.nDataSize == VC1_STRUCT_C_LEN) {
          QTV_MSG_PRIO2(QTVDIAG_GENERAL,QTVDIAG_PRIO_LOW,
                       "QC_DEBUG :: omx_vdec_check_port_settings - VC1 height and width, %d x %d\n",
