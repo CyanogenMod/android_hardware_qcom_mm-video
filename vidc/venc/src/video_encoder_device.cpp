@@ -409,8 +409,6 @@ bool venc_dev::venc_set_param(void *paramData,OMX_INDEXTYPE index )
                       m_sOutput_buff_property.maxcount, m_sOutput_buff_property.actualcount,
                       m_sOutput_buff_property.mincount);
 
-          if(temp_out_buf_count < 7)
-            temp_out_buf_count = 7;
           m_sOutput_buff_property.actualcount = temp_out_buf_count;
           ioctl_msg.inputparam = (void*)&m_sOutput_buff_property;
           ioctl_msg.outputparam = NULL;
@@ -448,7 +446,7 @@ bool venc_dev::venc_set_param(void *paramData,OMX_INDEXTYPE index )
         else
         {
           if((portDefn->nBufferCountActual >= m_sInput_buff_property.mincount) &&
-           (m_sInput_buff_property.actualcount <= portDefn->nBufferCountActual) &&
+           (m_sInput_buff_property.maxcount >= portDefn->nBufferCountActual) &&
             (m_sInput_buff_property.datasize == portDefn->nBufferSize))
           {
             m_sInput_buff_property.actualcount = portDefn->nBufferCountActual;
@@ -481,7 +479,7 @@ bool venc_dev::venc_set_param(void *paramData,OMX_INDEXTYPE index )
 
         if( (portDefn->nBufferCountActual >= m_sOutput_buff_property.mincount)
             &&
-            (m_sOutput_buff_property.actualcount <= portDefn->nBufferCountActual)
+            (m_sOutput_buff_property.maxcount >= portDefn->nBufferCountActual)
             &&
             (m_sOutput_buff_property.datasize == portDefn->nBufferSize)
           )
