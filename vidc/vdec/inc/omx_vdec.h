@@ -346,7 +346,8 @@ private:
         OMX_COMPONENT_GENERATE_RESUME_DONE = 0xF,
         OMX_COMPONENT_GENERATE_STOP_DONE = 0x10,
         OMX_COMPONENT_GENERATE_HARDWARE_ERROR = 0x11,
-        OMX_COMPONENT_GENERATE_ETB_ARBITRARY = 0x12
+        OMX_COMPONENT_GENERATE_ETB_ARBITRARY = 0x12,
+        OMX_COMPONENT_GENERATE_PORT_RECONFIG = 0x13
     };
 
     enum port_indexes
@@ -384,7 +385,7 @@ private:
 
     };
 
-    OMX_ERRORTYPE omx_vdec_check_port_settings(bool *port_setting_changed);
+    OMX_ERRORTYPE omx_vdec_check_port_settings(void);
     OMX_ERRORTYPE omx_vdec_validate_port_param(int height, int width);
 
 
@@ -430,7 +431,6 @@ private:
     bool execute_omx_flush(OMX_U32);
     bool execute_output_flush(OMX_U32);
     bool execute_input_flush(OMX_U32);
-    bool register_output_buffers();
     OMX_ERRORTYPE empty_buffer_done(OMX_HANDLETYPE hComp,
                                     OMX_BUFFERHEADERTYPE * buffer);
 
@@ -569,7 +569,6 @@ private:
     // store O/P PORT state
     OMX_BOOL m_out_bEnabled;
     // to know whether Event Port Settings change has been triggered or not.
-    bool m_event_port_settings_sent;
     OMX_U8                m_cRole[OMX_MAX_STRINGNAME_SIZE];
     // Platform specific details
     OMX_QCOM_PLATFORM_PRIVATE_LIST      *m_platform_list;
@@ -600,13 +599,6 @@ private:
     int first_frame_size;
     unsigned int mp4h263_flags;
     unsigned int mp4h263_timestamp;
-    bool set_seq_header_done;
-    bool gate_output_buffers;
-    bool gate_input_buffers;
-    bool sent_first_frame;
-    unsigned int m_out_buf_count_recon;
-    unsigned int m_out_buf_count_min_recon;
-    unsigned int m_out_buf_size_recon;
     unsigned char m_hwdevice_name[80];
     FILE *m_device_file_ptr;
     enum vc1_profile_type m_vc1_profile;

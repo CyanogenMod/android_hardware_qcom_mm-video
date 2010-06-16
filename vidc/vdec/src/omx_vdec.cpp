@@ -271,7 +271,6 @@ omx_vdec::omx_vdec(): m_state(OMX_StateInvalid),
                       m_flags(0),
                       m_inp_bEnabled(OMX_TRUE),
                       m_out_bEnabled(OMX_TRUE),
-                      m_event_port_settings_sent(false),
                       m_platform_list(NULL),
                       m_platform_entry(NULL),
                       m_pmem_info(NULL),
@@ -296,10 +295,6 @@ omx_vdec::omx_vdec(): m_state(OMX_StateInvalid),
                       first_frame(0),
                       first_buffer(NULL),
                       first_frame_size (0),
-                      set_seq_header_done(false),
-                      gate_output_buffers(true),
-                      gate_input_buffers(false),
-                      sent_first_frame(false),
                       stride(0),
                       scan_lines(0),
                       m_error_propogated(false),
@@ -396,7 +391,7 @@ void omx_vdec::process_event_cb(void *ctxt, unsigned char id)
       pThis->m_cmd_q.pop_entry(&p1,&p2,&ident);
     }
 
-    if (qsize == 0 && !pThis->gate_output_buffers)
+    if (qsize == 0)
     {
       qsize = pThis->m_ftb_q.m_size;
       if (qsize)
@@ -457,8 +452,6 @@ void omx_vdec::process_event_cb(void *ctxt, unsigned char id)
                 DEBUG_PRINT_HIGH("\n OMX_CommandPortDisable complete for port [%d]", p2);
                 pThis->m_cb.EventHandler(&pThis->m_cmp, pThis->m_app_data,
                                       OMX_EventCmdComplete, p1, p2, NULL );
-                //TODO: Check if output port is one that got disabled
-                pThis->gate_output_buffers = false;
                 break;
               case OMX_CommandPortEnable:
                 DEBUG_PRINT_HIGH("\n OMX_CommandPortEnable complete for port [%d]", p2);
@@ -750,25 +743,23 @@ void omx_vdec::process_event_cb(void *ctxt, unsigned char id)
 
           break;
 
+        case OMX_COMPONENT_GENERATE_PORT_RECONFIG:
+          DEBUG_PRINT_HIGH("\n Rxd OMX_COMPONENT_GENERATE_PORT_RECONFIG");
+          pThis->m_cb.EventHandler(&pThis->m_cmp, pThis->m_app_data, OMX_EventPortSettingsChanged,
+                            OMX_CORE_OUTPUT_PORT_INDEX, 0, NULL );
+        break;
+
         case OMX_COMPONENT_GENERATE_HARDWARE_ERROR:
           DEBUG_PRINT_ERROR("\n OMX_COMPONENT_GENERATE_HARDWARE_ERROR");
           pThis->omx_report_error ();
           break;
-
         default:
           break;
         }
       }
     pthread_mutex_lock(&pThis->m_lock);
-    if(!pThis->gate_output_buffers)
-    {
     qsize = pThis->m_cmd_q.m_size + pThis->m_ftb_q.m_size +\
             pThis->m_etb_q.m_size;
-    }
-    else
-    {
-      qsize = pThis->m_cmd_q.m_size + pThis->m_etb_q.m_size;
-    }
     pthread_mutex_unlock(&pThis->m_lock);
   }
   while(qsize>0);
@@ -1037,13 +1028,12 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
       eRet = OMX_ErrorInsufficientResources;
     }
 
-    m_out_buf_count_recon = m_out_buf_count = driver_context.output_buffer.actualcount;
-    m_out_buf_count_min_recon = m_out_buf_count_min = driver_context.output_buffer.mincount;
+    m_out_buf_count = driver_context.output_buffer.actualcount;
+    m_out_buf_count_min = driver_context.output_buffer.mincount;
 
     alignment = driver_context.output_buffer.alignment;
     buffer_size = driver_context.output_buffer.buffer_size;
-    m_out_buf_size_recon = m_out_buf_size =
-      ((buffer_size + alignment - 1) & (~(alignment -1)));
+    m_out_buf_size = ((buffer_size + alignment - 1) & (~(alignment -1)));
 #ifdef MAX_RES_720P
     scan_lines = m_crop_dy = m_height = 720;
     stride = m_crop_dx = m_width = 1280;
@@ -1303,10 +1293,16 @@ OMX_ERRORTYPE  omx_vdec::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
       /* Requesting transition from Idle to Executing */
       else if(eState == OMX_StateExecuting)
       {
-        BITMASK_SET(&m_flags,OMX_COMPONENT_EXECUTE_PENDING);
         DEBUG_PRINT_LOW("send_command_proxy(): Idle-->Executing\n");
-        post_event (NULL,VDEC_S_SUCCESS,OMX_COMPONENT_GENERATE_START_DONE);
+        BITMASK_SET(&m_flags, OMX_COMPONENT_EXECUTE_PENDING);
         bFlag = 0;
+        if (ioctl (driver_context.video_driver_fd,VDEC_IOCTL_CMD_START,
+                    NULL) < 0)
+        {
+          DEBUG_PRINT_ERROR("\n VDEC_IOCTL_CMD_START FAILED");
+          omx_report_error ();
+          eRet = OMX_ErrorHardware;
+        }
       }
       /* Requesting transition from Idle to Idle */
       else if(eState == OMX_StateIdle)
@@ -1338,7 +1334,7 @@ OMX_ERRORTYPE  omx_vdec::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
          else
          {
            BITMASK_SET(&m_flags,OMX_COMPONENT_PAUSE_PENDING);
-           DEBUG_PRINT_LOW("send_command_proxy(): Idle-->Pause\n");
+           DEBUG_PRINT_LOW("send_command_proxy(): Idle-->Executing\n");
            bFlag = 0;
          }
       }
@@ -1814,20 +1810,6 @@ bool omx_vdec::execute_output_flush(OMX_U32 flushType)
   }
   pthread_mutex_unlock(&m_lock);
 
-  if(gate_output_buffers)
-  {
-    DEBUG_PRINT_LOW("\n Output Buffers gated Check flush response");
-    if(BITMASK_PRESENT(&m_flags,OMX_COMPONENT_OUTPUT_FLUSH_PENDING))
-    {
-      DEBUG_PRINT_LOW("\n Notify Output Flush done");
-      BITMASK_CLEAR (&m_flags,OMX_COMPONENT_OUTPUT_FLUSH_PENDING);
-      m_cb.EventHandler(&m_cmp,m_app_data,OMX_EventCmdComplete,OMX_CommandFlush,
-                               OMX_CORE_OUTPUT_PORT_INDEX,NULL );
-    }
-    output_flush_progress = false;
-    return bRet;
-  }
-
   DEBUG_PRINT_LOW("\n output buffers count = %d",pending_output_buffers);
 
   if(flushType == 1)
@@ -2019,6 +2001,8 @@ OMX_ERRORTYPE  omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE     hComp,
                                            OMX_INOUT OMX_PTR     paramData)
 {
     OMX_ERRORTYPE eRet = OMX_ErrorNone;
+    struct vdec_ioctl_msg ioctl_msg = {NULL, NULL};
+    unsigned int alignment = 0, buffer_size = 0;
     unsigned int height=0,width = 0;
 
     DEBUG_PRINT_LOW("get_parameter: \n");
@@ -2065,9 +2049,25 @@ OMX_ERRORTYPE  omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE     hComp,
       }
       else if (1 == portDefn->nPortIndex)
       {
-        m_out_buf_count = m_out_buf_count_recon;
-        m_out_buf_count_min = m_out_buf_count_min_recon;
-        m_out_buf_size = m_out_buf_size_recon;
+        driver_context.output_buffer.buffer_type =
+                                                VDEC_BUFFER_TYPE_OUTPUT;
+        ioctl_msg.inputparam = NULL;
+        ioctl_msg.outputparam = &driver_context.output_buffer;
+
+        if (ioctl (driver_context.video_driver_fd,
+                  VDEC_IOCTL_GET_BUFFER_REQ,(void*)&ioctl_msg) < 0)
+        {
+           DEBUG_PRINT_ERROR("\n Request output buffer requirements failed");
+           return OMX_ErrorUnsupportedSetting;
+        }
+
+        m_out_buf_count = driver_context.output_buffer.actualcount;
+        m_out_buf_count_min = driver_context.output_buffer.mincount;
+
+        alignment = driver_context.output_buffer.alignment;
+        buffer_size = driver_context.output_buffer.buffer_size;
+        m_out_buf_size = (buffer_size + alignment) & (~alignment);
+
         portDefn->eDir =  OMX_DirOutput;
         portDefn->nBufferCountActual = m_out_buf_count;
         portDefn->nBufferCountMin    = m_out_buf_count_min;
@@ -2367,7 +2367,7 @@ OMX_ERRORTYPE  omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE     hComp,
               return OMX_ErrorUnsupportedSetting;
           }
           m_out_buf_count = portDefn->nBufferCountActual;
-          m_out_buf_count_recon = m_out_buf_count;
+
         DEBUG_PRINT_LOW("set_parameter:OMX_IndexParamPortDefinition output port\n");
       }
       else if(OMX_DirInput == portDefn->eDir)
@@ -2415,13 +2415,12 @@ OMX_ERRORTYPE  omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE     hComp,
                    return OMX_ErrorUnsupportedSetting;
                }
 
-               m_out_buf_count_recon = m_out_buf_count = driver_context.output_buffer.actualcount;
-               m_out_buf_count_min_recon = m_out_buf_count_min = driver_context.output_buffer.mincount;
+               m_out_buf_count = driver_context.output_buffer.actualcount;
+               m_out_buf_count_min = driver_context.output_buffer.mincount;
 
                alignment = driver_context.output_buffer.alignment;
                buffer_size = driver_context.output_buffer.buffer_size;
-               m_out_buf_size_recon = m_out_buf_size =
-                 ((buffer_size + alignment - 1) & (~(alignment - 1)));
+               m_out_buf_size = (buffer_size + alignment) & (~alignment);
            }
         }
         else
@@ -3424,7 +3423,6 @@ OMX_ERRORTYPE  omx_vdec::use_buffer(
           post_event(OMX_CommandPortEnable,
                      OMX_CORE_OUTPUT_PORT_INDEX,
                      OMX_COMPONENT_GENERATE_EVENT);
-          m_event_port_settings_sent = false;
         }
       }
     }
@@ -3494,20 +3492,17 @@ OMX_ERRORTYPE omx_vdec::free_output_buffer(OMX_BUFFERHEADERTYPE *bufferHdr)
     DEBUG_PRINT_LOW("\n Free ouput Buffer index = %d addr = %x", index,
                     driver_context.ptr_outputbuffer[index].bufferaddr);
 
-    if (!gate_output_buffers)
-    {
-      struct vdec_ioctl_msg ioctl_msg = {NULL,NULL};
-      struct vdec_setbuffer_cmd setbuffers;
-      setbuffers.buffer_type = VDEC_BUFFER_TYPE_OUTPUT;
-      memcpy (&setbuffers.buffer,&driver_context.ptr_outputbuffer[index],
+    struct vdec_ioctl_msg ioctl_msg = {NULL,NULL};
+    struct vdec_setbuffer_cmd setbuffers;
+    setbuffers.buffer_type = VDEC_BUFFER_TYPE_OUTPUT;
+    memcpy (&setbuffers.buffer,&driver_context.ptr_outputbuffer[index],
         sizeof (vdec_bufferpayload));
-      ioctl_msg.inputparam  = &setbuffers;
-      ioctl_msg.outputparam = NULL;
-      DEBUG_PRINT_LOW("\nRelease the Output Buffer");
-      if (ioctl (driver_context.video_driver_fd, VDEC_IOCTL_FREE_BUFFER,
-            &ioctl_msg) < 0)
-        DEBUG_PRINT_ERROR("\nRelease output buffer failed in VCD");
-    }
+    ioctl_msg.inputparam  = &setbuffers;
+    ioctl_msg.outputparam = NULL;
+    DEBUG_PRINT_LOW("\nRelease the Output Buffer");
+    if (ioctl (driver_context.video_driver_fd, VDEC_IOCTL_FREE_BUFFER,
+          &ioctl_msg) < 0)
+      DEBUG_PRINT_ERROR("\nRelease output buffer failed in VCD");
 
     if (driver_context.ptr_outputbuffer[0].pmem_fd > 0)
     {
@@ -4001,21 +3996,18 @@ OMX_ERRORTYPE  omx_vdec::allocate_output_buffer(
       m_pmem_info[i].pmem_fd = (OMX_U32) m_heap_ptr.get ();
       driver_context.ptr_outputbuffer[i].buffer_len = m_out_buf_size;
       //driver_context.ptr_outputbuffer[i].mmaped_size = m_out_buf_size;
-     if(!gate_output_buffers)
-     {
      setbuffers.buffer_type = VDEC_BUFFER_TYPE_OUTPUT;
-     memcpy (&setbuffers.buffer,&driver_context.ptr_outputbuffer [i],
+     memcpy (&setbuffers.buffer,&driver_context.ptr_outputbuffer[i],
              sizeof (vdec_bufferpayload));
      ioctl_msg.inputparam  = &setbuffers;
      ioctl_msg.outputparam = NULL;
 
-     DEBUG_PRINT_LOW("\n Set the Output Buffer");
+     DEBUG_PRINT_LOW("\n Set the Output Buffer Idx: %d Addr: %x", i, driver_context.ptr_outputbuffer[i]);
      if (ioctl (driver_context.video_driver_fd,VDEC_IOCTL_SET_BUFFER,
           &ioctl_msg) < 0)
      {
        DEBUG_PRINT_ERROR("\n Set output buffer failed");
        return OMX_ErrorInsufficientResources;
-     }
      }
 
       // found an empty buffer at i
@@ -4116,7 +4108,6 @@ OMX_ERRORTYPE  omx_vdec::allocate_buffer(OMX_IN OMX_HANDLETYPE                hC
                 post_event(OMX_CommandPortEnable,
                            OMX_CORE_OUTPUT_PORT_INDEX,
                            OMX_COMPONENT_GENERATE_EVENT);
-                m_event_port_settings_sent = false;
             }
         }
     }
@@ -4458,12 +4449,6 @@ OMX_ERRORTYPE  omx_vdec::empty_this_buffer_proxy(OMX_IN OMX_HANDLETYPE         h
     return OMX_ErrorNone;
   }
 
-  if(m_event_port_settings_sent && !arbitrary_bytes)
-  {
-    post_event((unsigned)hComp,(unsigned)buffer,OMX_COMPONENT_GENERATE_ETB);
-    return OMX_ErrorNone;
-  }
-
   temp_buffer = (struct vdec_bufferpayload *)buffer->pInputPortPrivate;
 
   if ((temp_buffer -  driver_context.ptr_inputbuffer) > m_inp_buf_count)
@@ -4535,49 +4520,6 @@ OMX_ERRORTYPE  omx_vdec::empty_this_buffer_proxy(OMX_IN OMX_HANDLETYPE         h
 
 #endif
 
-  if(!set_seq_header_done)
-  {
-    set_seq_header_done = true;
-    DEBUG_PRINT_HIGH("\n Set Sequence Header");
-    seq_header.ptr_seqheader = frameinfo.bufferaddr;
-    seq_header.seq_header_len = frameinfo.datalen;
-    seq_header.pmem_fd = frameinfo.pmem_fd;
-    seq_header.pmem_offset = frameinfo.pmem_offset;
-    ioctl_msg.inputparam = &seq_header;
-    ioctl_msg.outputparam = NULL;
-    if (ioctl(driver_context.video_driver_fd,VDEC_IOCTL_SET_SEQUENCE_HEADER,
-              &ioctl_msg) < 0)
-    {
-      DEBUG_PRINT_ERROR("\n Set Sequence Header Failed");
-      /*Generate an async error and move to invalid state*/
-      return OMX_ErrorBadParameter;
-    }
-    if(omx_vdec_check_port_settings (&port_setting_changed) != OMX_ErrorNone)
-    {
-      DEBUG_PRINT_ERROR("\n Check port setting failed");
-      return OMX_ErrorBadParameter;
-    }
-
-    if(port_setting_changed)
-    {
-      DEBUG_PRINT_HIGH("\n Port settings changed");
-      m_event_port_settings_sent = true;
-      m_cb.EventHandler(&m_cmp, m_app_data,OMX_EventPortSettingsChanged,
-                          OMX_CORE_OUTPUT_PORT_INDEX, 0, NULL );
-      DEBUG_PRINT_HIGH("\n EventHandler for Port Setting changed done");
-      return OMX_ErrorNone;
-    }
-    else
-    {
-      if(!register_output_buffers())
-      {
-        DEBUG_PRINT_ERROR("\n register output failed");
-        return OMX_ErrorBadParameter;
-      }
-      DEBUG_PRINT_HIGH("\n Port settings Not changed");
-    }
-  }
-
   if (temp_buffer->buffer_len == 0 || (buffer->nFlags & 0x01))
   {
     DEBUG_PRINT_HIGH("\n Rxd i/p EOS, Notify Driver that EOS has been reached");
@@ -4585,7 +4527,6 @@ OMX_ERRORTYPE  omx_vdec::empty_this_buffer_proxy(OMX_IN OMX_HANDLETYPE         h
     m_ineos_reached = 1;
   }
 
-  sent_first_frame = true;
   DEBUG_PRINT_LOW("\n Decode Input Frame Size %d",frameinfo.datalen);
   ioctl_msg.inputparam = &frameinfo;
   ioctl_msg.outputparam = NULL;
@@ -4669,7 +4610,7 @@ OMX_ERRORTYPE  omx_vdec::fill_this_buffer_proxy(
   DEBUG_PRINT_LOW("\n FTBProxy: bufhdr = %p, bufhdr->pBuffer = %p",
       bufferAdd, bufferAdd->pBuffer);
   /*Return back the output buffer to client*/
-  if( (m_event_port_settings_sent == true) || (m_out_bEnabled != OMX_TRUE)
+  if((m_out_bEnabled != OMX_TRUE)
       || output_flush_progress == true || m_outeos_reached == 1)
   {
     DEBUG_PRINT_LOW("\n Output Buffers return in EOS condition");
@@ -4703,20 +4644,6 @@ OMX_ERRORTYPE  omx_vdec::fill_this_buffer_proxy(
     return OMX_ErrorBadParameter;
   }
 
-  if(gate_input_buffers)
-  {
-    gate_input_buffers = false;
-    if(pdest_frame)
-    {
-      /*Push the frame to the Decoder*/
-      if (empty_this_buffer_proxy(hComp,pdest_frame) != OMX_ErrorNone)
-      {
-        return OMX_ErrorBadParameter;
-      }
-      frame_count++;
-      pdest_frame = NULL;
-    }
-  }
   return OMX_ErrorNone;
 }
 
@@ -5216,13 +5143,12 @@ RETURN VALUE
   OMX_ErrorNone, if profile and level are supported
   OMX_ErrorUnsupportedSetting, if profile and level are not supported
 ========================================================================== */
-OMX_ERRORTYPE omx_vdec::omx_vdec_check_port_settings(bool *port_setting_changed)
+OMX_ERRORTYPE omx_vdec::omx_vdec_check_port_settings(void)
 {
     struct vdec_ioctl_msg ioctl_msg;
     unsigned int alignment = 0,buffer_size = 0;
     OMX_ERRORTYPE eRet = OMX_ErrorNone;
 
-    *port_setting_changed = false;
     ioctl_msg.inputparam = NULL;
     ioctl_msg.outputparam = &driver_context.video_resoultion;
     if (ioctl (driver_context.video_driver_fd,VDEC_IOCTL_GET_PICRES,&ioctl_msg))
@@ -5252,39 +5178,15 @@ OMX_ERRORTYPE omx_vdec::omx_vdec_check_port_settings(bool *port_setting_changed)
                        driver_context.video_resoultion.stride,driver_context.video_resoultion.scan_lines,
                        stride,scan_lines);
 
-
-    if(driver_context.video_resoultion.frame_height != m_height ||
-       driver_context.video_resoultion.frame_width != m_width ||
-       driver_context.video_resoultion.scan_lines != scan_lines ||
-       driver_context.video_resoultion.stride != stride ||
-       driver_context.output_buffer.actualcount != m_out_buf_count ||
-       driver_context.output_buffer.buffer_size > m_out_buf_size)
-    {
-      *port_setting_changed = true;
-      ioctl_msg.inputparam = &driver_context.output_buffer;
-      ioctl_msg.outputparam = NULL;
-
-      if (ioctl (driver_context.video_driver_fd,VDEC_IOCTL_SET_BUFFER_REQ,
-                 &ioctl_msg))
-      {
-         DEBUG_PRINT_ERROR("\n Error in VDEC_IOCTL_GET_BUFFER_REQ in port_setting");
-         return OMX_ErrorHardware;
-      }
-      m_out_buf_size_recon = driver_context.output_buffer.buffer_size;
-      m_out_buf_count_recon = driver_context.output_buffer.actualcount;
-      m_out_buf_count_min_recon = driver_context.output_buffer.mincount;
-
-      alignment = driver_context.output_buffer.alignment;
-      buffer_size = driver_context.output_buffer.buffer_size;
-      m_out_buf_size_recon =
-        ((buffer_size + alignment - 1) & (~(alignment - 1)));
-      m_crop_dy = m_height      = driver_context.video_resoultion.frame_height;
-      m_crop_dx = m_width       = driver_context.video_resoultion.frame_width;
-      scan_lines = driver_context.video_resoultion.scan_lines;
-      stride = driver_context.video_resoultion.stride;
-      m_port_height             = m_height;
-      m_port_width              = m_width;
-    }
+    alignment = driver_context.output_buffer.alignment;
+    buffer_size = driver_context.output_buffer.buffer_size;
+    m_out_buf_size = (buffer_size + alignment) & (~alignment);
+    m_crop_dy = m_height      = driver_context.video_resoultion.frame_height;
+    m_crop_dx = m_width       = driver_context.video_resoultion.frame_width;
+    scan_lines = driver_context.video_resoultion.scan_lines;
+    stride = driver_context.video_resoultion.stride;
+    m_port_height             = m_height;
+    m_port_width              = m_width;
 
     return eRet;
 }
@@ -5563,6 +5465,12 @@ int omx_vdec::async_message_process (void *context, void* message)
     omx->post_event ((unsigned int)omxhdr,vdec_msg->status_code,
                      OMX_COMPONENT_GENERATE_FBD);
     break;
+  case VDEC_MSG_EVT_CONFIG_CHANGED:
+    DEBUG_PRINT_HIGH("\n Port settings changed");
+    omx->omx_vdec_check_port_settings();
+    omx->post_event ((unsigned int)omxhdr,vdec_msg->status_code,
+                     OMX_COMPONENT_GENERATE_PORT_RECONFIG);
+    break;
   default:
     break;
   }
@@ -5623,7 +5531,7 @@ OMX_ERRORTYPE omx_vdec::push_input_buffer (OMX_HANDLETYPE hComp)
     if (pdest_frame == NULL)
     {
       DEBUG_PRINT_LOW("\n Get a Destination buffer from the queue");
-      if (m_input_free_q.m_size && !gate_input_buffers)
+      if (m_input_free_q.m_size)
       {
         m_input_free_q.pop_entry(&address,&p2,&id);
         pdest_frame = (OMX_BUFFERHEADERTYPE *)address;
@@ -5636,7 +5544,7 @@ OMX_ERRORTYPE omx_vdec::push_input_buffer (OMX_HANDLETYPE hComp)
     if (psource_frame == NULL)
     {
       DEBUG_PRINT_LOW("\n Get a source buffer from the queue");
-      if (m_input_pending_q.m_size && !gate_input_buffers)
+      if (m_input_pending_q.m_size)
       {
         m_input_pending_q.pop_entry(&address,&p2,&id);
         psource_frame = (OMX_BUFFERHEADERTYPE *)address;
@@ -5650,7 +5558,7 @@ OMX_ERRORTYPE omx_vdec::push_input_buffer (OMX_HANDLETYPE hComp)
 
   }
 
-  while ((pdest_frame != NULL) && (psource_frame != NULL)&& !gate_input_buffers)
+  while ((pdest_frame != NULL) && (psource_frame != NULL))
   {
     switch (codec_type_parse)
     {
@@ -5725,15 +5633,10 @@ OMX_ERRORTYPE omx_vdec::push_input_sc_codec(OMX_HANDLETYPE hComp)
       {
         return OMX_ErrorBadParameter;
       }
-      if(m_event_port_settings_sent)
-      {
-        gate_input_buffers = true;
-        return OMX_ErrorNone;
-      }
       frame_count++;
       pdest_frame = NULL;
 
-      if (m_input_free_q.m_size && !gate_input_buffers)
+      if (m_input_free_q.m_size)
       {
         m_input_free_q.pop_entry(&address,&p2,&id);
         pdest_frame = (OMX_BUFFERHEADERTYPE *) address;
@@ -5955,14 +5858,9 @@ OMX_ERRORTYPE omx_vdec::push_input_h264 (OMX_HANDLETYPE hComp)
             {
               return OMX_ErrorBadParameter;
             }
-            if(m_event_port_settings_sent)
-            {
-              gate_input_buffers = true;
-              return OMX_ErrorNone;
-            }
             //frame_count++;
             pdest_frame = NULL;
-            if (m_input_free_q.m_size && !gate_input_buffers)
+            if (m_input_free_q.m_size)
             {
               m_input_free_q.pop_entry(&address,&p2,&id);
               pdest_frame = (OMX_BUFFERHEADERTYPE *) address;
@@ -6020,11 +5918,6 @@ OMX_ERRORTYPE omx_vdec::push_input_h264 (OMX_HANDLETYPE hComp)
         {
           return OMX_ErrorBadParameter;
         }
-          if(m_event_port_settings_sent)
-          {
-            gate_input_buffers = true;
-            return OMX_ErrorNone;
-          }
         frame_count++;
         pdest_frame = NULL;
       }
@@ -6037,17 +5930,17 @@ OMX_ERRORTYPE omx_vdec::push_input_h264 (OMX_HANDLETYPE hComp)
     }
     if(genarte_edb)
     {
-		m_cb.EmptyBufferDone (hComp,m_app_data,psource_frame);
-		psource_frame = NULL;
-		if (m_input_pending_q.m_size && !gate_input_buffers)
-		{
-			DEBUG_PRINT_LOW("\n Pull Next source Buffer %p",psource_frame);
-		  m_input_pending_q.pop_entry(&address,&p2,&id);
-		  psource_frame = (OMX_BUFFERHEADERTYPE *) address;
-		  DEBUG_PRINT_LOW("\nNext source Buffer flag %d length %d",
-		  psource_frame->nFlags,psource_frame->nFilledLen);
-		}
-	}
+      m_cb.EmptyBufferDone (hComp,m_app_data,psource_frame);
+      psource_frame = NULL;
+      if (m_input_pending_q.m_size)
+      {
+        DEBUG_PRINT_LOW("\n Pull Next source Buffer %p",psource_frame);
+        m_input_pending_q.pop_entry(&address,&p2,&id);
+        psource_frame = (OMX_BUFFERHEADERTYPE *) address;
+        DEBUG_PRINT_LOW("\nNext source Buffer flag %d length %d",
+        psource_frame->nFlags,psource_frame->nFilledLen);
+      }
+    }
   }
   return OMX_ErrorNone;
 }
@@ -6119,58 +6012,6 @@ OMX_ERRORTYPE omx_vdec::push_input_vc1 (OMX_HANDLETYPE hComp)
             return OMX_ErrorBadParameter;
     }
     return OMX_ErrorNone;
-}
-
-bool omx_vdec::register_output_buffers()
-{
-  struct vdec_ioctl_msg ioctl_msg;
-  struct vdec_setbuffer_cmd setbuffers;
-  int i = 0;
-  unsigned p1 =0,p2 = 0,ident = 0;
-
-  for(i=0;i<m_out_buf_count;i++)
-  {
-    setbuffers.buffer_type = VDEC_BUFFER_TYPE_OUTPUT;
-    memcpy (&setbuffers.buffer,&driver_context.ptr_outputbuffer [i],
-            sizeof (vdec_bufferpayload));
-    ioctl_msg.inputparam  = &setbuffers;
-    ioctl_msg.outputparam = NULL;
-
-    DEBUG_PRINT_LOW("\n Set the Output Buffer");
-    if (ioctl (driver_context.video_driver_fd,VDEC_IOCTL_SET_BUFFER,
-         &ioctl_msg) < 0)
-    {
-      DEBUG_PRINT_ERROR("\n Set output buffer failed");
-      return false;
-    }
-  }
-  if(gate_output_buffers)
-  {
-    /*Generate FBD for all Buffers in the FTBq*/
-    pthread_mutex_lock(&m_lock);
-    DEBUG_PRINT_LOW("\n Initiate Pushing Output Buffers");
-    while (m_ftb_q.m_size)
-    {
-      m_ftb_q.pop_entry(&p1,&p2,&ident);
-      if(ident == OMX_COMPONENT_GENERATE_FTB )
-      {
-        if (fill_this_buffer_proxy ((OMX_HANDLETYPE)p1,
-                                    (OMX_BUFFERHEADERTYPE *)p2) != OMX_ErrorNone)
-          {
-             DEBUG_PRINT_ERROR("\n fill_this_buffer_proxy failure");
-             omx_report_error ();
-             return false;
-          }
-      }
-      else if (ident == OMX_COMPONENT_GENERATE_FBD)
-      {
-        fill_buffer_done(&m_cmp,(OMX_BUFFERHEADERTYPE *)p1);
-      }
-    }
-    gate_output_buffers = false;
-    pthread_mutex_unlock(&m_lock);
-  }
-  return true;
 }
 
 bool omx_vdec::align_pmem_buffers(int pmem_fd, OMX_U32 buffer_size,
