@@ -118,7 +118,14 @@ static const unsigned int h263_profile_level_table[][5]=
     {1620,81000,16384000,OMX_VIDEO_H263Level70,OMX_VIDEO_H263ProfileBaseline},
     {0,0,0,0,0}
 };
-
+#ifdef INPUT_BUFFER_LOG
+FILE *inputBufferFile1;
+char inputfilename [] = "/data/input.yuv";
+#endif
+#ifdef OUTPUT_BUFFER_LOG
+FILE *outputBufferFile1;
+char outputfilename [] = "/data/output-bitstream.\0\0\0\0";
+#endif
 //constructor
 venc_dev::venc_dev()
 {
@@ -198,18 +205,27 @@ bool venc_dev::venc_open(OMX_U32 codec)
     m_sVenc_cfg.codectype = VEN_CODEC_MPEG4;
     codec_profile.profile = VEN_PROFILE_MPEG4_SP;
     profile_level.level = VEN_LEVEL_MPEG4_2;
+#ifdef OUTPUT_BUFFER_LOG
+    strcat(outputfilename, "m4v");
+#endif
   }
   else if(codec == OMX_VIDEO_CodingH263)
   {
     m_sVenc_cfg.codectype = VEN_CODEC_H263;
     codec_profile.profile = VEN_PROFILE_H263_BASELINE;
     profile_level.level = VEN_LEVEL_H263_20;
+#ifdef OUTPUT_BUFFER_LOG
+    strcat(outputfilename, "263");
+#endif
   }
   if(codec == OMX_VIDEO_CodingAVC)
   {
     m_sVenc_cfg.codectype = VEN_CODEC_H264;
     codec_profile.profile = VEN_PROFILE_H264_BASELINE;
     profile_level.level = VEN_LEVEL_H264_1p1;
+#ifdef OUTPUT_BUFFER_LOG
+    strcat(outputfilename, "264");
+#endif
   }
   ioctl_msg.inputparam = (void*)&m_sVenc_cfg;
   ioctl_msg.outputparam = NULL;
@@ -218,7 +234,12 @@ bool venc_dev::venc_open(OMX_U32 codec)
     DEBUG_PRINT_ERROR("\nERROR: Request for setting base configuration failed");
     return false;
   }
-
+#ifdef INPUT_BUFFER_LOG
+  inputBufferFile1 = fopen (inputfilename, "ab");
+#endif
+#ifdef OUTPUT_BUFFER_LOG
+  outputBufferFile1 = fopen (outputfilename, "ab");
+#endif
   // Get the I/P and O/P buffer requirements
   ioctl_msg.inputparam = NULL;
   ioctl_msg.outputparam = (void*)&m_sInput_buff_property;
@@ -258,6 +279,12 @@ void venc_dev::venc_close()
     close(m_nDriver_fd);
     m_nDriver_fd = -1;
   }
+#ifdef INPUT_BUFFER_LOG
+  fclose (inputBufferFile1);
+#endif
+#ifdef OUTPUT_BUFFER_LOG
+  fclose (outputBufferFile1);
+#endif
 }
 
 bool venc_dev::venc_set_buf_req(unsigned long *min_buff_count,
@@ -1014,7 +1041,12 @@ bool venc_dev::venc_empty_buf(void *buffer, void *pmem_data_buf)
     /*Generate an async error and move to invalid state*/
     return false;
   }
-
+#ifdef INPUT_BUFFER_LOG
+  if(inputBufferFile1)
+  {
+    fwrite((const char *)frameinfo.ptrbuffer, frameinfo.len, 1,inputBufferFile1);
+  }
+#endif
   return true;
 }
 bool venc_dev::venc_fill_buf(void *buffer, void *pmem_data_buf)

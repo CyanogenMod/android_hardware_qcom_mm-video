@@ -83,6 +83,10 @@ typedef struct OMXComponentCapabilityFlagsType
 } OMXComponentCapabilityFlagsType;
 #define OMX_COMPONENT_CAPABILITY_TYPE_INDEX 0xFF7A347
 
+#ifdef OUTPUT_BUFFER_LOG
+extern FILE *outputBufferFile1;
+#endif
+
 void* message_thread(void *input)
 {
   omx_video* omx = reinterpret_cast<omx_video*>(input);
@@ -3501,6 +3505,13 @@ OMX_ERRORTYPE omx_video::fill_buffer_done(OMX_HANDLETYPE hComp,
     if(buffer->nFilledLen > 0)
     {
       m_fbd_count++;
+
+#ifdef OUTPUT_BUFFER_LOG
+      if(outputBufferFile1)
+      {
+        fwrite((const char *)buffer->pBuffer, buffer->nFilledLen, 1, outputBufferFile1);
+      }
+#endif
     }
     m_pCallbacks.FillBufferDone (hComp,m_app_data,buffer);
   }
@@ -3508,7 +3519,6 @@ OMX_ERRORTYPE omx_video::fill_buffer_done(OMX_HANDLETYPE hComp,
   {
     return OMX_ErrorBadParameter;
   }
-
   return OMX_ErrorNone;
 }
 
