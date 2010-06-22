@@ -110,6 +110,7 @@ class VideoHeap:public MemoryHeapBase {
 #define BITMASK_ABSENT(mArray,mIndex) \
             (((mArray)[BITMASK_OFFSET(mIndex)] & BITMASK_FLAG(mIndex)) == 0x0)
 
+#define OMX_CORE_MIN_INPUT_BUFFERS   1
 #define OMX_CORE_NUM_INPUT_BUFFERS   MAX_NUM_INPUT_BUFFERS
 #define OMX_CORE_NUM_OUTPUT_BUFFERS  32   //changed from 32 - 8
 #define OMX_CORE_NUM_OUTPUT_BUFFERS_H264  8

@@ -399,6 +399,15 @@ int adsp_free_buffers(struct adsp_module *mod, struct adsp_buffer_info bufinfo)
 
 }
 
+int adsp_setproperty(struct adsp_module *mod, struct vdec_property_info *property)
+{
+//   LOGE("Setting priority");
+   int ret = ioctl(mod->fd, VDEC_IOCTL_SETPROPERTY, property);
+   if(ret) {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_FATAL, "Setting priority failed");
+   }
+   return ret;
+}
 int adsp_init(struct adsp_module *mod, struct adsp_init *init)
 {
    struct vdec_init vi;

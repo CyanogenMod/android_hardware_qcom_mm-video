@@ -63,6 +63,7 @@ static void vdec_reuse_input_cb_handler(void *vdec_context, void *buffer_id);
 
 #define VDEC_INPUT_BUFFER_SIZE  450 * 1024
 #define VDEC_NUM_INPUT_BUFFERS  8
+#define VDEC_NUM_INPUT_BUFFERS_THUMBNAIL_MODE  8
 #define VDEC_MAX_SEQ_HEADER_SIZE 300
 
 struct Vdec_pthread_info {
@@ -146,7 +147,7 @@ void vdec_frame_cb_handler(void *vdec_context,
          } else {
             ++nGoodFrameCnt;
             dec->ctxt->outputBuffer[index].flags = 0;
-            QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW,
+            QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
                      "vdec: callback status good frame, cnt: %d\n",
                      nGoodFrameCnt);
 
@@ -316,7 +317,7 @@ Vdec_ReturnType vdec_close(struct VDecoder *dec)
 }
 
 Vdec_ReturnType vdec_get_input_buf_requirements(struct VDecoder_buf_info *
-                  buf_req)
+                  buf_req, int mode)
 {
    if (NULL == buf_req) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
@@ -325,7 +326,11 @@ Vdec_ReturnType vdec_get_input_buf_requirements(struct VDecoder_buf_info *
    }
 
    buf_req->buffer_size = VDEC_INPUT_BUFFER_SIZE;
-   buf_req->numbuf = VDEC_NUM_INPUT_BUFFERS;
+   if(mode == FLAG_THUMBNAIL_MODE) {
+      buf_req->numbuf = VDEC_NUM_INPUT_BUFFERS_THUMBNAIL_MODE;
+   } else {
+      buf_req->numbuf = VDEC_NUM_INPUT_BUFFERS;
+   }
    return VDEC_SUCCESS;
 }
 
@@ -366,9 +371,9 @@ Vdec_ReturnType vdec_allocate_input_buffer(unsigned int size,
       buf->state = VDEC_BUFFER_WITH_APP;
    } else {
       byte *data = NULL;
-      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
-              "Allocating input buffer from heap\n");
       data = (byte *) malloc(size * sizeof(byte));
+      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
+              "Allocating input buffer from heap %x\n",data );
       if (data == NULL) {
          QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
                  "heap allocation failed\n");
@@ -821,6 +826,12 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
               "Adsp Open Failed\n");
       goto fail_initialize;
    }
+   if(FLAG_THUMBNAIL_MODE == init.postproc_flag) {
+      struct vdec_property_info property;
+      property.id = VDEC_PRIORITY;
+      property.property.priority = 0;
+      adsp_setproperty((struct adsp_module *)dec->adsp_module, &property);
+   }
 
    QPERF_RESET(arm_decode);
 
@@ -830,8 +841,15 @@ struct VDecoder *vdec_open(struct vdec_context *ctxt)
    dec->ctxt->inputReq.numMaxBuffers = init.buf_req->input.bufnum_max;
    dec->ctxt->inputReq.bufferSize = init.buf_req->input.bufsize;
 
-   dec->ctxt->outputReq.numMinBuffers = init.buf_req->output.bufnum_min;
-   dec->ctxt->outputReq.numMaxBuffers = init.buf_req->output.bufnum_max;
+   if(init.buf_req->output.bufnum_min < 2) {
+      /* actually according to dsp for thumbnails only 1 o/p buff is enough, but
+         because of some issue for some clips they needed atleast two o/p buffs */
+      dec->ctxt->outputReq.numMinBuffers = 2;
+      dec->ctxt->outputReq.numMaxBuffers = 2;
+   } else {
+      dec->ctxt->outputReq.numMinBuffers = init.buf_req->output.bufnum_min;
+      dec->ctxt->outputReq.numMaxBuffers = init.buf_req->output.bufnum_max;
+   }
    dec->ctxt->outputReq.bufferSize = init.buf_req->output.bufsize;
    QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
             "vdec_open input numbuf= %d and bufsize= %d\n",
