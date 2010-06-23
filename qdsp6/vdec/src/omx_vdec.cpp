@@ -8739,7 +8739,8 @@ OMX_ERRORTYPE omx_vdec::
             }
             dest->nFilledLen += copy_size;
             dest->nFlags = source->nFlags;
-            dest->nTimeStamp = source->nTimeStamp;
+/*CR  243133 */
+//           dest->nTimeStamp = source->nTimeStamp;
             *isPartialFrame = false;
             m_is_copy_truncated = false;
             m_arbitrary_bytes_info.start_code.
