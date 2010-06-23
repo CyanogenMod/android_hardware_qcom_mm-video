@@ -253,8 +253,6 @@ boolean H264_Utils::extract_rbsp(OMX_IN   OMX_U8  *buffer,
   boolean eRet = true;
   boolean start_code = (size_of_nal_length_field==0)?true:false;
 
-  DEBUG_PRINT_LOW("extract_rbsp\n");
-
   if(start_code) {
     // Search start_code_prefix_one_3bytes (0x000001)
     coef2 = buffer[pos++];
@@ -304,7 +302,8 @@ boolean H264_Utils::extract_rbsp(OMX_IN   OMX_U8  *buffer,
   }
   nal_unit->nal_ref_idc   = (buffer[pos] & 0x60) >> 5;
   nal_unit->nalu_type = buffer[pos++] & 0x1f;
-  DEBUG_PRINT_LOW("\n@#@# Pos = %x NalType = %x buflen = %d",pos-1,nal_unit->nalu_type,buffer_length);
+  DEBUG_PRINT_LOW("\n@#@# Pos = %x NalType = %x buflen = %d",
+      pos-1, nal_unit->nalu_type, buffer_length);
   *rbsp_length = 0;
 
 
@@ -375,8 +374,9 @@ bool H264_Utils::isNewFrame(OMX_IN OMX_U8 *buffer,
     uint32 numBytesInRBSP = 0;
     bool eRet = true;
 
-    DEBUG_PRINT_LOW("get_h264_nal_type %p nal_length %d nal_length_field %d\n",
-                 buffer, buffer_length, size_of_nal_length_field);
+    DEBUG_PRINT_LOW("isNewFrame: buffer %p buffer_length %d "
+        "size_of_nal_length_field %d\n", buffer, buffer_length,
+        size_of_nal_length_field);
 
     if ( false == extract_rbsp(buffer, buffer_length, size_of_nal_length_field,
                                m_rbspBytes, &numBytesInRBSP, &nal_unit) )
@@ -392,7 +392,7 @@ bool H264_Utils::isNewFrame(OMX_IN OMX_U8 *buffer,
         case NALU_TYPE_IDR:
         case NALU_TYPE_NON_IDR:
         {
-          DEBUG_PRINT_LOW("\n Found a AU Boundary %d ",nal_unit.nalu_type);
+          DEBUG_PRINT_LOW("\n AU Boundary with NAL type %d ",nal_unit.nalu_type);
           if (m_forceToStichNextNAL)
           {
             isNewFrame = OMX_FALSE;
@@ -426,7 +426,7 @@ bool H264_Utils::isNewFrame(OMX_IN OMX_U8 *buffer,
         case NALU_TYPE_EOSEQ:
         case NALU_TYPE_EOSTREAM:
         {
-          DEBUG_PRINT_LOW("\n Non AU boundary NAL %d",nal_unit.nalu_type);
+          DEBUG_PRINT_LOW("\n Non-AU boundary with NAL type %d", nal_unit.nalu_type);
           if(m_au_data)
           {
             isNewFrame = OMX_TRUE;

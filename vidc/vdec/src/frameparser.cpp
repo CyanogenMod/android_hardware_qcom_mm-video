@@ -134,14 +134,14 @@ int frame_parse::parse_mpeg4_frame ( OMX_BUFFERHEADERTYPE *source,
     /*Need Minimum of 4 for destination to copy atleast Start code*/
     if (dest_len < 4 || source_len == 0)
     {
-        DEBUG_PRINT_LOW("\n Dest_len %d source_len %d",dest_len,source_len);
+        DEBUG_PRINT_LOW("\n FrameParser: dest_len %d source_len %d",dest_len,source_len);
         if (source_len == 0 && (source->nFlags & 0x01))
         {
-            DEBUG_PRINT_LOW("\n EOS condition Inform Client that it is complete frame");
+            DEBUG_PRINT_LOW("\n FrameParser: EOS rxd!! Notify it as a complete frame");
             *partialframe = 0;
             return 1;
         }
-        DEBUG_PRINT_LOW("\n Error in Parsing bitstream");
+        DEBUG_PRINT_LOW("\n FrameParser: Bitstream Parsing error");
         return -1;
     }
 
@@ -258,7 +258,7 @@ int frame_parse::parse_mpeg4_frame ( OMX_BUFFERHEADERTYPE *source,
      if (parse_state == A4)
      {
          *partialframe = 0;
-         DEBUG_PRINT_LOW("\n Nal Found length is %d",dest->nFilledLen);
+         DEBUG_PRINT_LOW("\n FrameParser: Parsed Len = %d", dest->nFilledLen);
          return 1;
      }
 
@@ -416,8 +416,8 @@ int frame_parse::parse_h264_nallength (OMX_BUFFERHEADERTYPE *source,
 
    if (dest_len < 4 || source_len == 0 || nal_length == 0)
    {
-       DEBUG_PRINT_LOW("\n Destination %d source %d nal length %d",\
-                                    dest_len,source_len,nal_length);
+       DEBUG_PRINT_LOW("\n FrameParser: NAL Parsing Error! dest_len %d "
+           "source_len %d nal_length %d", dest_len, source_len, nal_length);
        return -1;
    }
    *partialframe = 1;
