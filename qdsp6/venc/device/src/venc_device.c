@@ -570,6 +570,8 @@ static int ven_translate_config(struct ven_config_type* psrc,
     }
   }
 
+  pcommon->slice_config.slice_mode = psrc->multi_slice.mslice_mode;
+  pcommon->slice_config.units_per_slice = psrc->multi_slice.mslice_size;
   pcommon->input_frame_width   = psrc->base_config.input_width;
   pcommon->input_frame_height  = psrc->base_config.input_height;
   pcommon->output_frame_width  = psrc->base_config.dvs_width;
