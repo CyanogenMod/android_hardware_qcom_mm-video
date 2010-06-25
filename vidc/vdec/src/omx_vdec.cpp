@@ -47,11 +47,13 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "omx_vdec.h"
 #include <fcntl.h>
 
-#define BITSTREAM_LOG 0
-
-#if BITSTREAM_LOG
+#ifdef INPUT_BUFFER_LOG
+FILE *inputBufferFile1;
+char inputfilename [] = "/data/input-bitstream.\0\0\0\0";
+#endif
+#ifdef OUTPUT_BUFFER_LOG
 FILE *outputBufferFile1;
-char filename [] = "/data/input-bitstream.m4v";
+char outputfilename [] = "/data/output.yuv";
 #endif
 
 #define H264_SUPPORTED_WIDTH (480)
@@ -852,8 +854,8 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
   }
 #endif
 
-#if BITSTREAM_LOG
-  outputBufferFile1 = fopen (filename, "ab");
+#ifdef OUTPUT_BUFFER_LOG
+  outputBufferFile1 = fopen (outputfilename, "ab");
 #endif
 
   // Copy the role information which provides the decoder kind
@@ -869,6 +871,9 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
      /*Initialize Start Code for MPEG4*/
      codec_type_parse = CODEC_TYPE_MPEG4;
      m_frame_parser.init_start_codes (codec_type_parse);
+#ifdef INPUT_BUFFER_LOG
+    strcat(inputfilename, "m4v");
+#endif
   }
   else if(!strncmp(driver_context.kind, "OMX.qcom.video.decoder.h263",\
          OMX_MAX_STRINGNAME_SIZE))
@@ -879,6 +884,9 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
      eCompressionFormat = OMX_VIDEO_CodingH263;
      codec_type_parse = CODEC_TYPE_H263;
      m_frame_parser.init_start_codes (codec_type_parse);
+#ifdef INPUT_BUFFER_LOG
+    strcat(inputfilename, "263");
+#endif
   }
   else if(!strncmp(driver_context.kind, "OMX.qcom.video.decoder.avc",\
          OMX_MAX_STRINGNAME_SIZE))
@@ -889,6 +897,9 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
     codec_type_parse = CODEC_TYPE_H264;
     m_frame_parser.init_start_codes (codec_type_parse);
     m_frame_parser.init_nal_length(nal_length);
+#ifdef INPUT_BUFFER_LOG
+    strcat(inputfilename, "264");
+#endif
   }
   else if(!strncmp(driver_context.kind, "OMX.qcom.video.decoder.vc1",\
          OMX_MAX_STRINGNAME_SIZE))
@@ -898,13 +909,18 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
     eCompressionFormat = OMX_VIDEO_CodingWMV;
     codec_type_parse = CODEC_TYPE_VC1;
     m_frame_parser.init_start_codes (codec_type_parse);
+#ifdef INPUT_BUFFER_LOG
+    strcat(inputfilename, "vc1");
+#endif
   }
   else
   {
     DEBUG_PRINT_ERROR("\nERROR:Unknown Component\n");
     eRet = OMX_ErrorInvalidComponentName;
   }
-
+#ifdef INPUT_BUFFER_LOG
+  inputBufferFile1 = fopen (inputfilename, "ab");
+#endif
   if (eRet == OMX_ErrorNone)
   {
 #ifdef MAX_RES_720P
@@ -4516,11 +4532,12 @@ OMX_ERRORTYPE  omx_vdec::empty_this_buffer_proxy(OMX_IN OMX_HANDLETYPE         h
   frameinfo.pmem_offset = temp_buffer->offset;
   frameinfo.timestamp = buffer->nTimeStamp;
 
-#if BITSTREAM_LOG
-  int bytes_written;
-  bytes_written = fwrite((const char *)temp_buffer->bufferaddr,
-                          temp_buffer->buffer_len,1,outputBufferFile1);
-
+#ifdef INPUT_BUFFER_LOG
+  if (inputBufferFile1)
+  {
+    fwrite((const char *)temp_buffer->bufferaddr,
+      temp_buffer->buffer_len,1,inputBufferFile1);
+  }
 #endif
 
   if (temp_buffer->buffer_len == 0 || (buffer->nFlags & 0x01))
@@ -4777,7 +4794,10 @@ OMX_ERRORTYPE  omx_vdec::component_deinit(OMX_IN OMX_HANDLETYPE hComp)
     DEBUG_PRINT_HIGH("\n Close the driver instance");
     close(driver_context.video_driver_fd);
 
-#if BITSTREAM_LOG
+#ifdef INPUT_BUFFER_LOG
+    fclose (inputBufferFile1);
+#endif
+#ifdef OUTPUT_BUFFER_LOG
     fclose (outputBufferFile1);
 #endif
 #ifdef _ANDROID_
@@ -5217,8 +5237,6 @@ OMX_ERRORTYPE omx_vdec::omx_vdec_validate_port_param(int height, int width)
     return ret;
 }
 
-static FILE * outputBufferFile = NULL;
-
 OMX_ERRORTYPE omx_vdec::fill_buffer_done(OMX_HANDLETYPE hComp,
                                OMX_BUFFERHEADERTYPE * buffer)
 {
@@ -5264,16 +5282,13 @@ OMX_ERRORTYPE omx_vdec::fill_buffer_done(OMX_HANDLETYPE hComp,
   }
 
   DEBUG_PRINT_LOW("\n In fill Buffer done call address %p ",buffer);
-
-  if (outputBufferFile == NULL)
+#ifdef OUTPUT_BUFFER_LOG
+  if (outputBufferFile1)
   {
-    outputBufferFile = fopen ("/data/output.yuv","wb");
+    fwrite (buffer->pBuffer,1,buffer->nFilledLen,
+                  outputBufferFile1);
   }
-  if (outputBufferFile)
-  {
-    /*fwrite (buffer->pBuffer,1,buffer->nFilledLen,
-                  outputBufferFile); */
-  }
+#endif
   /* For use buffer we need to copy the data */
   if (m_cb.FillBufferDone)
   {

@@ -50,6 +50,8 @@ libOmxVdec-def += -UENABLE_DEBUG_LOW
 libOmxVdec-def += -DENABLE_DEBUG_HIGH
 libOmxVdec-def += -DENABLE_DEBUG_ERROR
 libOmxVdec-def += -UMULTI_DEC_INST
+libOmxVdec-def += -UINPUT_BUFFER_LOG
+libOmxVdec-def += -UOUTPUT_BUFFER_LOG
 ifeq "$(findstring msm7630,$(TARGET_PRODUCT))" "msm7630"
 libOmxVdec-def += -DMAX_RES_720P
 endif
