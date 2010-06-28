@@ -568,7 +568,6 @@ private:
     OMX_BOOL m_inp_bEnabled;
     // store O/P PORT state
     OMX_BOOL m_out_bEnabled;
-    // to know whether Event Port Settings change has been triggered or not.
     OMX_U8                m_cRole[OMX_MAX_STRINGNAME_SIZE];
     // Platform specific details
     OMX_QCOM_PLATFORM_PRIVATE_LIST      *m_platform_list;
@@ -602,6 +601,11 @@ private:
     unsigned char m_hwdevice_name[80];
     FILE *m_device_file_ptr;
     enum vc1_profile_type m_vc1_profile;
+
+    bool valid_prev_ts;
+    long int prev_frame_ts;
+    unsigned int frame_interval;
+    unsigned int frame_rate;
 };
 
 #endif // __OMX_VDEC_H__
