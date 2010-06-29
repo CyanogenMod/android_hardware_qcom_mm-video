@@ -5680,7 +5680,7 @@ OMX_ERRORTYPE omx_vdec::push_input_sc_codec(OMX_HANDLETYPE hComp)
 
   DEBUG_PRINT_LOW("\n Start Parsing the bit stream address %p TimeStamp %d",
         psource_frame,psource_frame->nTimeStamp);
-  if (m_frame_parser.parse_mpeg4_frame(psource_frame,
+  if (m_frame_parser.parse_sc_frame(psource_frame,
                                        pdest_frame,&partial_frame) == -1)
   {
     DEBUG_PRINT_ERROR("\n Error In Parsing Return Error");
@@ -5851,7 +5851,7 @@ OMX_ERRORTYPE omx_vdec::push_input_h264 (OMX_HANDLETYPE hComp)
     if (nal_length == 0)
     {
       DEBUG_PRINT_LOW("\n Zero NAL, hence parse using start code");
-      if (m_frame_parser.parse_mpeg4_frame(psource_frame,
+      if (m_frame_parser.parse_sc_frame(psource_frame,
           &h264_scratch,&partial_frame) == -1)
       {
         DEBUG_PRINT_ERROR("\n Error In Parsing Return Error");
