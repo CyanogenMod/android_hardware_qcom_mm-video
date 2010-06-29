@@ -53,6 +53,16 @@ extern "C"{
 #define DEBUG_PRINT
 #define DEBUG_PRINT_ERROR
 
+//#define __DEBUG_DIVX__ // Uncomment this macro to print (through logcat)
+                         // the kind of frames packed per buffer and
+                         // timestamps adjustments for divx.
+
+#ifdef __DEBUG_DIVX__
+#define DIVX_PRINTF LOGE
+#else
+#define DIVX_PRINTF
+#endif
+
 #else
 #define DEBUG_PRINT printf
 #define DEBUG_PRINT_ERROR printf
@@ -107,7 +117,8 @@ typedef enum {
   CODEC_FORMAT_MP4,
   CODEC_FORMAT_H263,
   CODEC_FORMAT_VC1,
-  CODEC_FORMAT_MAX = CODEC_FORMAT_VC1
+  CODEC_FORMAT_DIVX,
+  CODEC_FORMAT_MAX = CODEC_FORMAT_DIVX
 } codec_format;
 
 typedef enum {
@@ -120,6 +131,7 @@ typedef enum {
 
   FILE_TYPE_START_OF_MP4_SPECIFIC = 20,
   FILE_TYPE_PICTURE_START_CODE = FILE_TYPE_START_OF_MP4_SPECIFIC,
+  FILE_TYPE_DIVX_PACKED_FRAMES,
 
   FILE_TYPE_START_OF_VC1_SPECIFIC = 30,
   FILE_TYPE_RCV = FILE_TYPE_START_OF_VC1_SPECIFIC,
@@ -210,8 +222,10 @@ unsigned char seq_enabled = 0, flush_in_progress = 0;
 unsigned int cmd_data = 0, etb_count = 0;;
 
 char curr_seq_command[100];
-int timeStampLfile = 0;
-int timestampInterval = 33333;
+long int timeStampLfile = 0;
+int fps = 30;
+unsigned int timestampInterval = 33333;
+long int lastTimestamp = 0;
 codec_format  codec_format_option;
 file_type     file_type_option;
 freeHandle_test freeHandle_option;
@@ -252,6 +266,7 @@ static int Read_Buffer_From_Size_Nal(OMX_BUFFERHEADERTYPE  *pBufHdr);
 static int Read_Buffer_From_RCV_File_Seq_Layer(OMX_BUFFERHEADERTYPE  *pBufHdr);
 static int Read_Buffer_From_RCV_File(OMX_BUFFERHEADERTYPE  *pBufHdr);
 static int Read_Buffer_From_VC1_File(OMX_BUFFERHEADERTYPE  *pBufHdr);
+static int Read_Buffer_From_DivX_File(OMX_BUFFERHEADERTYPE  *pBufHdr);
 
 static OMX_ERRORTYPE Allocate_Buffer ( OMX_COMPONENTTYPE *dec_handle,
                                        OMX_BUFFERHEADERTYPE  ***pBufHdrs,
@@ -272,15 +287,6 @@ static OMX_ERRORTYPE FillBufferDone(OMX_OUT OMX_HANDLETYPE hComponent,
                                     OMX_OUT OMX_BUFFERHEADERTYPE* pBuffer);
 
 static void do_freeHandle_and_clean_up(bool isDueToError);
-
-/*static usecs_t get_time(void)
-{
-    struct timeval tv;
-    gettimeofday(&tv, 0);
-    return ((usecs_t)tv.tv_usec) +
-        (((usecs_t)tv.tv_sec) * ((usecs_t)1000000));
-}*/
-
 
 void wait_for_event(void)
 {
@@ -477,6 +483,15 @@ void* fbd_thread(void* pArg)
        continue;
     }
 
+    DIVX_PRINTF("[DivX] FBD_Ctr[%d] Timestamp[%ld]\n",
+        fbd_cnt, pBuffer->nTimeStamp);
+    if (pBuffer->nTimeStamp != (lastTimestamp + timestampInterval))
+    {
+        DIVX_PRINTF("[DivX] Unexpected timestamp[%ld]! Expected[%ld]\n",
+            pBuffer->nTimeStamp, lastTimestamp + timestampInterval);
+    }
+    lastTimestamp = pBuffer->nTimeStamp;
+
     if (realtime_display)
     {
       if(!gettimeofday(&t_avsync,NULL))
@@ -504,7 +519,7 @@ void* fbd_thread(void* pArg)
           contigous_drop_frame++;
         }
         else
-    {
+        {
           canDisplay = 1;
         }
         pthread_mutex_unlock(&fbd_lock);
@@ -726,6 +741,7 @@ int main(int argc, char **argv)
       printf(" 2--> MP4\n");
       printf(" 3--> H263\n");
       printf(" 4--> VC1\n");
+      printf(" 5--> DivX\n");
       fflush(stdin);
       scanf("%d", &codec_format_option);
       fflush(stdin);
@@ -754,6 +770,10 @@ int main(int argc, char **argv)
         printf(" 3--> VC1 clip Simple/Main Profile (.rcv)\n");
         printf(" 4--> VC1 clip Advance Profile (.vc1)\n");
       }
+      else if (codec_format_option == CODEC_FORMAT_DIVX)
+      {
+          printf(" 3--> DivX clip (.cmp)\n");
+      }
       fflush(stdin);
       scanf("%d", &file_type_option);
       fflush(stdin);
@@ -765,6 +785,9 @@ int main(int argc, char **argv)
       {
         case CODEC_FORMAT_H264:
           file_type_option = (file_type)(FILE_TYPE_START_OF_H264_SPECIFIC + file_type_option - FILE_TYPE_COMMON_CODEC_MAX);
+          break;
+        case CODEC_FORMAT_DIVX:
+          file_type_option = FILE_TYPE_DIVX_PACKED_FRAMES;
           break;
         case CODEC_FORMAT_MP4:
         case CODEC_FORMAT_H263:
@@ -806,6 +829,7 @@ int main(int argc, char **argv)
       }
 
       if((file_type_option == FILE_TYPE_PICTURE_START_CODE) ||
+         (file_type_option == FILE_TYPE_DIVX_PACKED_FRAMES) ||
          (file_type_option == FILE_TYPE_RCV) ||
          (file_type_option == FILE_TYPE_VC1) && argc > 8)
       {
@@ -817,7 +841,7 @@ int main(int argc, char **argv)
           takeYuvLog = 0;
           if(argc > 9)
           {
-              int fps = atoi(argv[9]);
+              fps = atoi(argv[9]);
               timestampInterval = 1000000/fps;
           }
           else if(argc > 10)
@@ -839,7 +863,7 @@ int main(int argc, char **argv)
     }
     else
     {
-      int fps = 30;
+      fps = 30;
       switch(file_type_option)
       {
           case FILE_TYPE_DAT_PER_AU:
@@ -848,6 +872,7 @@ int main(int argc, char **argv)
           case FILE_TYPE_PICTURE_START_CODE:
           case FILE_TYPE_RCV:
           case FILE_TYPE_VC1:
+          case FILE_TYPE_DIVX_PACKED_FRAMES:
           {
               nalSize = 0;
               if ((file_type_option == FILE_TYPE_264_NAL_SIZE_LENGTH) ||
@@ -921,7 +946,8 @@ int main(int argc, char **argv)
 
       if((file_type_option == FILE_TYPE_PICTURE_START_CODE) ||
          (file_type_option == FILE_TYPE_RCV) ||
-         (file_type_option == FILE_TYPE_VC1))
+         (file_type_option == FILE_TYPE_VC1) ||
+         (file_type_option == FILE_TYPE_DIVX_PACKED_FRAMES))
       {
           printf(" *********************************************\n");
           printf(" DO YOU WANT TEST APP TO RENDER in Real time \n");
@@ -1136,6 +1162,9 @@ int run_tests()
           (codec_format_option == CODEC_FORMAT_MP4)) {
     Read_Buffer = Read_Buffer_From_Vop_Start_Code_File;
   }
+  else if(codec_format_option == CODEC_FORMAT_DIVX) {
+    Read_Buffer = Read_Buffer_From_DivX_File;
+  }
   else if(file_type_option == FILE_TYPE_RCV) {
     Read_Buffer = Read_Buffer_From_RCV_File;
   }
@@ -1153,6 +1182,7 @@ int run_tests()
     case FILE_TYPE_PICTURE_START_CODE:
     case FILE_TYPE_RCV:
     case FILE_TYPE_VC1:
+    case FILE_TYPE_DIVX_PACKED_FRAMES:
       if(Init_Decoder()!= 0x00)
       {
         DEBUG_PRINT_ERROR("Error - Decoder Init failed\n");
@@ -1350,6 +1380,10 @@ int Init_Decoder()
     {
       strncpy(vdecCompNames, "OMX.qcom.video.decoder.vc1", 27);
     }
+    else if (codec_format_option == CODEC_FORMAT_DIVX)
+    {
+      strncpy(vdecCompNames, "OMX.qcom.video.decoder.divx", 28);
+    }
     else
     {
       DEBUG_PRINT_ERROR("Error: Unsupported codec %d\n", codec_format_option);
@@ -1416,6 +1450,11 @@ int Init_Decoder()
     {
       portFmt.format.video.eCompressionFormat = OMX_VIDEO_CodingWMV;
     }
+    else if (codec_format_option == CODEC_FORMAT_DIVX)
+    {
+      portFmt.format.video.eCompressionFormat =
+          (OMX_VIDEO_CODINGTYPE)QOMX_VIDEO_CodingDivx;
+    }
     else
     {
       DEBUG_PRINT_ERROR("Error: Unsupported codec %d\n", codec_format_option);
@@ -1457,6 +1496,7 @@ int Play_Decoder()
 
       case FILE_TYPE_ARBITRARY_BYTES:
       case FILE_TYPE_264_NAL_SIZE_LENGTH:
+      case FILE_TYPE_DIVX_PACKED_FRAMES:
       {
         inputPortFmt.nFramePackingFormat = OMX_QCOM_FramePacking_Arbitrary;
         break;
@@ -1962,20 +2002,9 @@ static int Read_Buffer_From_DAT_File(OMX_BUFFERHEADERTYPE  *pBufHdr)
 
 static int Read_Buffer_ArbitraryBytes(OMX_BUFFERHEADERTYPE  *pBufHdr)
 {
-    char temp_buffer[10];
-    char temp_byte;
     int bytes_read=0;
-    int i=0;
-    unsigned char *read_buffer=NULL;
-    char c = '1'; //initialize to anything except '\0'(0)
-    char inputFrameSize[10];
-    int count =0; char cnt =0;
-    memset(temp_buffer, 0, sizeof(temp_buffer));
-
     DEBUG_PRINT("Inside %s \n", __FUNCTION__);
-
     bytes_read = fread(pBufHdr->pBuffer, 1, NUMBER_OF_ARBITRARYBYTES_READ,  inputBufferFile);
-
     if(bytes_read == 0) {
         DEBUG_PRINT("Bytes read Zero After Read frame Size \n");
         DEBUG_PRINT("Checking VideoPlayback Count:video_playback_count is:%d\n",
@@ -2273,6 +2302,129 @@ static int Read_Buffer_From_VC1_File(OMX_BUFFERHEADERTYPE  *pBufHdr)
 #endif
 
     return readOffset;
+}
+
+static int Read_Buffer_From_DivX_File(OMX_BUFFERHEADERTYPE  *pBufHdr)
+{
+#define MAX_NO_B_FRMS 3 // Number of non-b-frames packed in each buffer
+#define N_PREV_FRMS_B 1 // Number of previous non-b-frames packed
+                        // with a set of consecutive b-frames
+#define FRM_ARRAY_SIZE (MAX_NO_B_FRMS + N_PREV_FRMS_B)
+
+struct frame_data_type {
+  unsigned int offset;
+  long int timestamp;
+};
+
+    static long int timeStampLfile = 0;
+
+    char *p_buffer = NULL;
+    struct frame_data_type frame_data_arr[FRM_ARRAY_SIZE];
+    int byte_cntr, pckt_end_idx;
+    unsigned int read_code = 0, bytes_read, byte_pos = 0, frame_type;
+    unsigned int i, b_frm_idx, b_frames_found = 0, vop_set_cntr = 0;
+    bool pckt_ready = false;
+#ifdef __DEBUG_DIVX__
+    char pckt_type[20];
+    int pckd_frms = 0;
+    static unsigned int total_bytes = 0;
+    static unsigned int total_frames = 0;
+#endif //__DEBUG_DIVX__
+
+    DEBUG_PRINT("Inside %s \n", __FUNCTION__);
+    pBufHdr->nTimeStamp = timeStampLfile;
+
+    do {
+      p_buffer = (char *)pBufHdr->pBuffer + byte_pos;
+      bytes_read = fread(p_buffer, 1, NUMBER_OF_ARBITRARYBYTES_READ, inputBufferFile);
+      byte_pos += bytes_read;
+      for (byte_cntr = 0; byte_cntr < bytes_read && !pckt_ready; byte_cntr++) {
+        read_code <<= 8;
+        ((char*)&read_code)[0] = p_buffer[byte_cntr];
+        if (read_code == VOP_START_CODE) {
+          if (++byte_cntr < bytes_read) {
+            frame_type = p_buffer[byte_cntr];
+            frame_type &= 0x000000C0;
+#ifdef __DEBUG_DIVX__
+            switch (frame_type) {
+              case 0x00: pckt_type[pckd_frms] = 'I'; break;
+              case 0x40: pckt_type[pckd_frms] = 'P'; break;
+              case 0x80: pckt_type[pckd_frms] = 'B'; break;
+              default: pckt_type[pckd_frms] = 'X';
+            }
+            pckd_frms++;
+#endif // __DEBUG_DIVX__
+            frame_data_arr[vop_set_cntr].offset = byte_pos - bytes_read + byte_cntr - 4;
+            frame_data_arr[vop_set_cntr].timestamp = timeStampLfile;
+            timeStampLfile += timestampInterval;
+            if (frame_type == 0x80) { // B Frame found!
+              if (!b_frames_found) {
+                // Try to packet N_PREV_FRMS_B previous frames
+                // with the next consecutive B frames
+                i = N_PREV_FRMS_B;
+                while ((vop_set_cntr - i) < 0 && i > 0) i--;
+                b_frm_idx = vop_set_cntr - i;
+                if (b_frm_idx > 0) {
+                  pckt_end_idx = b_frm_idx;
+                  pckt_ready = true;
+#ifdef __DEBUG_DIVX__
+                  pckt_type[b_frm_idx] = '\0';
+                  total_frames += b_frm_idx;
+#endif //__DEBUG_DIVX__
+                }
+              }
+              b_frames_found++;
+            } else if (b_frames_found) {
+              pckt_end_idx = vop_set_cntr;
+              pckt_ready = true;
+#ifdef __DEBUG_DIVX__
+              pckt_type[pckd_frms - 1] = '\0';
+              total_frames += pckd_frms - 1;
+#endif //__DEBUG_DIVX__
+            } else if (vop_set_cntr == (FRM_ARRAY_SIZE -1)) {
+              pckt_end_idx = MAX_NO_B_FRMS;
+              pckt_ready = true;
+#ifdef __DEBUG_DIVX__
+              pckt_type[pckt_end_idx] = '\0';
+              total_frames += pckt_end_idx;
+#endif //__DEBUG_DIVX__
+            } else
+              vop_set_cntr++;
+          } else {
+            // The vop start code was found in the last 4 bytes,
+            // seek backwards by 4 to include this start code
+            // with the next buffer.
+            fseek(inputBufferFile, -4, SEEK_CUR);
+            byte_pos -= 4;
+#ifdef __DEBUG_DIVX__
+            pckd_frms--;
+#endif //__DEBUG_DIVX__
+          }
+        }
+      }
+      if (pckt_ready) {
+          fseek(inputBufferFile,
+            -(byte_pos - frame_data_arr[pckt_end_idx].offset), SEEK_CUR);
+      }
+      else if (feof(inputBufferFile)) { // Handle last packet
+          frame_data_arr[vop_set_cntr].offset = byte_pos;
+          pckt_end_idx = vop_set_cntr;
+          pckt_ready = true;
+#ifdef __DEBUG_DIVX__
+          pckt_type[pckd_frms] = '\0';
+          total_frames += pckd_frms;
+#endif //__DEBUG_DIVX__
+      }
+    } while (!pckt_ready);
+    pBufHdr->nFilledLen = frame_data_arr[pckt_end_idx].offset;
+    timeStampLfile = frame_data_arr[pckt_end_idx].timestamp;
+#ifdef __DEBUG_DIVX__
+    total_bytes += pBufHdr->nFilledLen;
+    DIVX_PRINTF("[DivX] Packet: Type[%s] Size[%u] TS[%ld] TB[%u] NFrms[%u]\n",
+      pckt_type, pBufHdr->nFilledLen, (long int)pBufHdr->nTimeStamp,
+	  total_bytes, total_frames);
+#endif //__DEBUG_DIVX__
+    return pBufHdr->nFilledLen;
 }
 
 static int open_video_file ()
