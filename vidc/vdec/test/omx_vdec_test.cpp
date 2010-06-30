@@ -175,11 +175,9 @@ pthread_mutex_t etb_lock;
 pthread_mutex_t fbd_lock;
 pthread_mutex_t lock;
 pthread_cond_t cond;
-pthread_mutex_t elock;
-pthread_cond_t econd;
-pthread_cond_t fcond;
 pthread_mutex_t eos_lock;
 pthread_cond_t eos_cond;
+pthread_mutex_t rcfg_lock;
 
 sem_t etb_sem;
 sem_t fbd_sem;
@@ -220,7 +218,8 @@ char in_filename[512];
 char seq_file_name[512];
 unsigned char seq_enabled = 0;
 unsigned char flush_input_progress = 0, flush_output_progress = 0;
-unsigned int cmd_data = 0, etb_count = 0;;
+unsigned int cmd_data = 0, etb_count = 0;
+unsigned char out_reconfig_in_progress = 0;
 
 char curr_seq_command[100];
 long int timeStampLfile = 0;
@@ -448,7 +447,7 @@ void* fbd_thread(void* pArg)
   while(currentStatus != INVALID_STATE)
   {
     long current_avsync_time = 0, delta_time = 0;
-    int canDisplay = 1;
+    int canDisplay = 1, ret = -1;
     static int contigous_drop_frame = 0;
     static long base_avsync_time = 0;
     static long base_timestamp = 0;
@@ -536,8 +535,14 @@ void* fbd_thread(void* pArg)
 
     if (!flush_output_progress && displayYuv && canDisplay && pBuffer->nFilledLen > 0)
     {
-        if(overlay_fb(pBuffer))
-            break;
+        pthread_mutex_lock(&fbd_lock);
+        ret = overlay_fb(pBuffer);
+        pthread_mutex_unlock(&fbd_lock);
+
+        if(ret)
+        {
+           break;
+        }
         contigous_drop_frame = 0;
     }
 
@@ -573,7 +578,13 @@ void* fbd_thread(void* pArg)
       DEBUG_PRINT("FBD_THREAD bOutputEosReached %d\n",bOutputEosReached);
       break;
     }
-    OMX_FillThisBuffer(dec_handle, pBuffer);
+
+    pthread_mutex_lock(&rcfg_lock);
+    if(!out_reconfig_in_progress)
+    {
+        OMX_FillThisBuffer(dec_handle, pBuffer);
+    }
+    pthread_mutex_unlock(&rcfg_lock);
   }
   return NULL;
 }
@@ -632,6 +643,9 @@ OMX_ERRORTYPE EventHandler(OMX_IN OMX_HANDLETYPE hComponent,
             DEBUG_PRINT("OMX_EventPortSettingsChanged port[%d]\n",nData1);
             waitForPortSettingsChanged = 0;
             currentStatus = PORT_SETTING_CHANGE_STATE;
+            pthread_mutex_lock(&rcfg_lock);
+            out_reconfig_in_progress = 1;
+            pthread_mutex_unlock(&rcfg_lock);
             // reset the event
             event_complete();
             break;
@@ -1035,6 +1049,7 @@ int main(int argc, char **argv)
     pthread_mutex_init(&lock, 0);
     pthread_mutex_init(&etb_lock, 0);
     pthread_mutex_init(&fbd_lock, 0);
+    pthread_mutex_init(&rcfg_lock, 0);
     if (-1 == sem_init(&etb_sem, 0, 0))
     {
       printf("Error - sem_init failed %d\n", errno);
@@ -1113,6 +1128,7 @@ int main(int argc, char **argv)
     pthread_mutex_destroy(&lock);
     pthread_mutex_destroy(&etb_lock);
     pthread_mutex_destroy(&fbd_lock);
+    pthread_mutex_destroy(&rcfg_lock);
     pthread_cond_destroy(&eos_cond);
     pthread_mutex_destroy(&eos_lock);
     if (-1 == sem_destroy(&etb_sem))
@@ -1623,7 +1639,14 @@ int Play_Decoder()
         DEBUG_PRINT("OMX_FillThisBuffer on output buf no.%d\n",bufCnt);
         pOutYUVBufHdrs[bufCnt]->nOutputPortIndex = 1;
         pOutYUVBufHdrs[bufCnt]->nFlags &= ~OMX_BUFFERFLAG_EOS;
-        ret = OMX_FillThisBuffer(dec_handle, pOutYUVBufHdrs[bufCnt]);
+
+        pthread_mutex_lock(&rcfg_lock);
+        if(!out_reconfig_in_progress)
+        {
+            ret = OMX_FillThisBuffer(dec_handle, pOutYUVBufHdrs[bufCnt]);
+        }
+        pthread_mutex_unlock(&rcfg_lock);
+
         if (OMX_ErrorNone != ret) {
             DEBUG_PRINT_ERROR("Error - OMX_FillThisBuffer failed with result %d\n", ret);
         }
@@ -1750,7 +1773,6 @@ int Play_Decoder()
     else if (currentStatus == PORT_SETTING_CHANGE_STATE)
     {
         DEBUG_PRINT("PORT_SETTING_CHANGE_STATE\n");
-
         DEBUG_PRINT("\n Sending FLUSH cmd to OMX compt");
         flush_output_progress = 1;
         OMX_SendCommand(dec_handle, OMX_CommandFlush, 1, 0);
@@ -1819,6 +1841,15 @@ int Play_Decoder()
         }
         DEBUG_PRINT("ENABLE EVENT HANDLER RECD\n");
 
+        pthread_mutex_lock(&rcfg_lock);
+        out_reconfig_in_progress = 0;
+        pthread_mutex_unlock(&rcfg_lock);
+
+        if(displayYuv)
+        {
+            overlay_set();
+        }
+
         for(bufCnt=0; bufCnt < portFmt.nBufferCountActual; ++bufCnt) {
             DEBUG_PRINT("OMX_FillThisBuffer on output buf no.%d\n",bufCnt);
             pOutYUVBufHdrs[bufCnt]->nOutputPortIndex = 1;
@@ -1830,11 +1861,6 @@ int Play_Decoder()
             else {
                 DEBUG_PRINT("OMX_FillThisBuffer success!\n");
             }
-        }
-
-        if(displayYuv)
-        {
-            overlay_set();
         }
     }
 
