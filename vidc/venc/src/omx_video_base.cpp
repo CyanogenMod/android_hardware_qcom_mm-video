@@ -473,7 +473,7 @@ void omx_video::process_event_cb(void *ctxt, unsigned char id)
           {
             if(!pThis->output_flush_progress)
             {
-              printf("\n dev_stop called after input flush complete\n");
+              DEBUG_PRINT_LOW("\n dev_stop called after input flush complete\n");
               if(dev_stop() != 0)
               {
                 DEBUG_PRINT_ERROR("\nERROR: dev_stop() failed in i/p flush!\n");
@@ -619,7 +619,7 @@ void omx_video::process_event_cb(void *ctxt, unsigned char id)
 
   }
   while(qsize>0);
-  printf("\n exited the while loop\n");
+  DEBUG_PRINT_LOW("\n exited the while loop\n");
 
 }
 
@@ -655,6 +655,10 @@ OMX_OUT OMX_UUIDTYPE* componentUUID
     return OMX_ErrorInvalidState;
   }
   /* TBD -- Return the proper version */
+  if (specVersion)
+  {
+    specVersion->nVersion = OMX_SPEC_VERSION;
+  }
   return OMX_ErrorNone;
 }
 /* ======================================================================
@@ -797,7 +801,7 @@ OMX_ERRORTYPE  omx_video::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
       }
       else
       {
-        DEBUG_PRINT_ERROR("ERROR: OMXCORE-SM: Loaded-->Invalid(%d Not Handled)\n",\
+        DEBUG_PRINT_ERROR("ERROR: OMXCORE-SM: Loaded-->%d Not Handled\n",\
                           eState);
         eRet = OMX_ErrorBadParameter;
       }
@@ -877,7 +881,7 @@ OMX_ERRORTYPE  omx_video::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
         else
         {
           BITMASK_SET(&m_flags,OMX_COMPONENT_PAUSE_PENDING);
-          DEBUG_PRINT_LOW("OMXCORE-SM: Idle-->Executing\n");
+          DEBUG_PRINT_LOW("OMXCORE-SM: Idle-->Pause\n");
           bFlag = 0;
         }
       }
@@ -926,7 +930,7 @@ OMX_ERRORTYPE  omx_video::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
         else
         {
           BITMASK_SET(&m_flags,OMX_COMPONENT_PAUSE_PENDING);
-          DEBUG_PRINT_LOW("OMXCORE-SM: Idle-->Executing\n");
+          DEBUG_PRINT_LOW("OMXCORE-SM: Executing-->Pause\n");
           bFlag = 0;
         }
       }
@@ -985,7 +989,8 @@ OMX_ERRORTYPE  omx_video::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
         else
         {
           BITMASK_SET(&m_flags,OMX_COMPONENT_EXECUTE_PENDING);
-          DEBUG_PRINT_LOW("OMXCORE-SM: Idle-->Executing\n");
+          DEBUG_PRINT_LOW("OMXCORE-SM: Pause-->Executing\n");
+          post_event (NULL, NULL, OMX_COMPONENT_GENERATE_RESUME_DONE);
           bFlag = 0;
         }
       }
