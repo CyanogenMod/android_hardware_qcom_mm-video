@@ -43,6 +43,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include<stdlib.h>
 #include <stdio.h>
+#include <sys/mman.h>
 #ifdef _ANDROID_
   #include <binder/MemoryHeapBase.h>
 #endif // _ANDROID_
@@ -82,6 +83,11 @@ public:
 #else
 #define DEBUG_PRINT_ERROR
 #endif
+
+#else //_ANDROID_
+#define DEBUG_PRINT_LOW
+#define DEBUG_PRINT_HIGH
+#define DEBUG_PRINT_ERROR
 #endif // _ANDROID_
 //////////////////////////////////////////////////////////////////////////////
 //                       Module specific globals

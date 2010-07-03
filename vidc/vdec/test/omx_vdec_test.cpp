@@ -64,6 +64,7 @@ extern "C"{
 #endif
 
 #else
+#define DIVX_PRINTF printf
 #define DEBUG_PRINT printf
 #define DEBUG_PRINT_ERROR printf
 #endif /* _ANDROID_ */
@@ -75,9 +76,11 @@ extern "C" {
 #include "queue.h"
 }
 
+#include <inttypes.h>
 #include <linux/msm_mdp.h>
 #include <linux/fb.h>
 //#include "qutility.h"
+#include <sys/time.h>
 
 
 /************************************************************************/
@@ -2678,12 +2681,16 @@ int overlay_fb(struct OMX_BUFFERHEADERTYPE *pBufHdr)
 {
     OMX_QCOM_PLATFORM_PRIVATE_PMEM_INFO *pPMEMInfo = NULL;
     struct msmfb_overlay_data ov_front;
+#ifdef _ANDROID_
     MemoryHeapBase *vheap = NULL;
+#endif
     ov_front.id = overlayp->id;
     pPMEMInfo  = (OMX_QCOM_PLATFORM_PRIVATE_PMEM_INFO *)
                 ((OMX_QCOM_PLATFORM_PRIVATE_LIST *)
                     pBufHdr->pPlatformPrivate)->entryList->entry;
+#ifdef _ANDROID_
     vheap = (MemoryHeapBase*)pPMEMInfo->pmem_fd;
+#endif
 
 #ifdef _ANDROID_
     ov_front.data.memory_id = vheap->getHeapID();

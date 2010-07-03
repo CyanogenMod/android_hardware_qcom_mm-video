@@ -27,6 +27,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 --------------------------------------------------------------------------*/
 #include "frameparser.h"
 #include "omx_vdec.h"
+#include <string.h>
 
 #ifdef _ANDROID_
     extern "C"{

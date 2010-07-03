@@ -28,6 +28,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __OMX_VENC__H
 #define __OMX_VENC__H
 
+#include <unistd.h>
 #include "omx_video_base.h"
 #include "video_encoder_device.h"
 

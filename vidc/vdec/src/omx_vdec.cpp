@@ -47,6 +47,11 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "omx_vdec.h"
 #include <fcntl.h>
 
+#ifndef _ANDROID_
+#include <stropts.h>
+#include <sys/mman.h>
+#endif //_ANDROID_
+
 #ifdef INPUT_BUFFER_LOG
 FILE *inputBufferFile1;
 char inputfilename [] = "/data/input-bitstream.\0\0\0\0";
@@ -3972,11 +3977,12 @@ OMX_ERRORTYPE  omx_vdec::allocate_output_buffer(
 
     pmem_baseaddress = (unsigned char *)mmap(NULL,(m_out_buf_size * m_out_buf_count),
                        PROT_READ|PROT_WRITE,MAP_SHARED,pmem_fd,0);
+#ifdef _ANDROID_
     m_heap_ptr = new VideoHeap (pmem_fd,
                                    m_out_buf_size*m_out_buf_count,
                                    pmem_baseaddress);
 
-
+#endif
     if (pmem_baseaddress == MAP_FAILED)
     {
       DEBUG_PRINT_ERROR("\n MMAP failed for Size %d",m_out_buf_size);
@@ -4098,7 +4104,13 @@ OMX_ERRORTYPE  omx_vdec::allocate_output_buffer(
     if(i < m_out_buf_count)
     {
       m_pmem_info[i].offset = driver_context.ptr_outputbuffer[i].offset;
+
+#ifdef _ANDROID_
       m_pmem_info[i].pmem_fd = (OMX_U32) m_heap_ptr.get ();
+#else
+      m_pmem_info[i].pmem_fd = driver_context.ptr_outputbuffer[i].pmem_fd ;
+#endif
+
       driver_context.ptr_outputbuffer[i].buffer_len = m_out_buf_size;
       //driver_context.ptr_outputbuffer[i].mmaped_size = m_out_buf_size;
      setbuffers.buffer_type = VDEC_BUFFER_TYPE_OUTPUT;
