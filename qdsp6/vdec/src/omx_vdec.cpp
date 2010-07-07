@@ -5440,6 +5440,7 @@ OMX_ERRORTYPE omx_vdec::
       m_current_frame->pBuffer = buffer->pBuffer + buffer->nOffset;
       m_current_frame->nOffset = 0;
       m_current_frame->nFilledLen = 0;
+      m_current_frame->nTimeStamp= 0;
    }
 
    if (!m_vdec) {
@@ -8751,8 +8752,10 @@ OMX_ERRORTYPE omx_vdec::
             }
             dest->nFilledLen += copy_size;
             dest->nFlags = source->nFlags;
-/*CR  243133 */
-//           dest->nTimeStamp = source->nTimeStamp;
+            if(!dest->nTimeStamp)
+            {
+               dest->nTimeStamp = source->nTimeStamp;
+            }
             *isPartialFrame = false;
             m_is_copy_truncated = false;
             m_arbitrary_bytes_info.start_code.
