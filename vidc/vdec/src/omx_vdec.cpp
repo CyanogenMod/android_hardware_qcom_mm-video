@@ -2172,14 +2172,15 @@ OMX_ERRORTYPE  omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE     hComp,
       }
       else if (1 == portFmt->nPortIndex)
       {
+        portFmt->eCompressionFormat =  OMX_VIDEO_CodingUnused;
         if (0 == portFmt->nIndex)
         {
-           if (driver_context.output_format == VDEC_YUV_FORMAT_NV12)
-             portFmt->eColorFormat = OMX_COLOR_FormatYUV420SemiPlanar;
-           else
-            portFmt->eColorFormat = (OMX_COLOR_FORMATTYPE)0x7F000000;
-
-           portFmt->eCompressionFormat =  OMX_VIDEO_CodingUnused;
+          portFmt->eColorFormat = OMX_COLOR_FormatYUV420SemiPlanar;
+        }
+        else if(1 == portFmt->nIndex)
+        {
+          portFmt->eColorFormat = (OMX_COLOR_FORMATTYPE)
+            QOMX_COLOR_FormatYUV420PackedSemiPlanar64x32Tile2m8ka;
         }
         else
         {
@@ -2530,13 +2531,59 @@ OMX_ERRORTYPE  omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE     hComp,
       DEBUG_PRINT_LOW("set_parameter: OMX_IndexParamVideoPortFormat %d\n",
               portFmt->eColorFormat);
 
-      DEBUG_PRINT_LOW("set_parameter: OMX_IndexParamVideoPortFormat %d\n",
-             portFmt->eColorFormat);
       if(1 == portFmt->nPortIndex)
       {
+         if(portFmt->eColorFormat == OMX_COLOR_FormatYUV420SemiPlanar)
+         {
+           driver_context.output_format = VDEC_YUV_FORMAT_NV12;
+         }
+         else if(portFmt->eColorFormat ==
+           QOMX_COLOR_FormatYUV420PackedSemiPlanar64x32Tile2m8ka)
+         {
+           driver_context.output_format = VDEC_YUV_FORMAT_TILE_4x2;
+         }
+         else
+         {
+           eRet = OMX_ErrorBadParameter;
+         }
 
-         m_color_format = portFmt->eColorFormat;
-      }
+         if(eRet == OMX_ErrorNone)
+         {
+           /*Set the output format*/
+           ioctl_msg.inputparam = &driver_context.output_format;
+           ioctl_msg.outputparam = NULL;
+
+           if (ioctl(driver_context.video_driver_fd, VDEC_IOCTL_SET_OUTPUT_FORMAT,
+                 (void*)&ioctl_msg) < 0)
+           {
+             DEBUG_PRINT_ERROR("\n Set output format failed");
+             eRet = OMX_ErrorUnsupportedSetting;
+           }
+           else
+           {
+             m_color_format = portFmt->eColorFormat;
+             driver_context.output_buffer.buffer_type = VDEC_BUFFER_TYPE_OUTPUT;
+             ioctl_msg.inputparam = NULL;
+             ioctl_msg.outputparam = &driver_context.output_buffer;
+
+             if (ioctl (driver_context.video_driver_fd,VDEC_IOCTL_GET_BUFFER_REQ,
+                    (void*)&ioctl_msg) < 0)
+             {
+               DEBUG_PRINT_ERROR("\n Requesting for output buffer requirements failed");
+               eRet = OMX_ErrorInsufficientResources;
+             }
+             else
+             {
+               m_out_buf_count = driver_context.output_buffer.actualcount;
+               m_out_buf_count_min = driver_context.output_buffer.mincount;
+
+               alignment = driver_context.output_buffer.alignment;
+               buffer_size = driver_context.output_buffer.buffer_size;
+               m_out_buf_size = ((buffer_size + alignment - 1) & (~(alignment -1)));
+             }
+           }
+         }
+       }
     }
     break;
 

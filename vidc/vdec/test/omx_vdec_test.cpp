@@ -187,6 +187,8 @@ sem_t in_flush_sem, out_flush_sem;
 OMX_PARAM_PORTDEFINITIONTYPE portFmt;
 OMX_PORT_PARAM_TYPE portParam;
 OMX_ERRORTYPE error;
+OMX_COLOR_FORMATTYPE color_fmt;
+unsigned int color_fmt_type = 0;
 
 #define CLR_KEY  0xe8fd
 #define COLOR_BLACK_RGBA_8888 0x00000000
@@ -861,9 +863,13 @@ int main(int argc, char **argv)
               fps = atoi(argv[9]);
               timestampInterval = 1000000/fps;
           }
-          else if(argc > 10)
+          if(argc > 10)
           {
               strncpy(seq_file_name, argv[10], strlen(argv[10])+1);
+          }
+          if(argc > 11)
+          {
+              color_fmt_type = atoi(argv[11]);
           }
       }
       else
@@ -871,6 +877,10 @@ int main(int argc, char **argv)
           if(argc > 9)
           {
               strncpy(seq_file_name, argv[9], strlen(argv[9])+1);
+          }
+          if(argc > 10)
+          {
+              color_fmt_type = atoi(argv[10]);
           }
       }
       height=144;width=176; // Assume Default as QCIF
@@ -994,6 +1004,14 @@ int main(int argc, char **argv)
       printf(" *********************************************\n");
       fflush(stdin);
       scanf("%[^\n]", &seq_file_name);
+      fflush(stdin);
+
+      printf(" *********************************************\n");
+      printf(" ENTER THE COLOR FORMAT \n");
+      printf(" 0 --> Semiplanar \n 1 --> Tile Mode\n");
+      printf(" *********************************************\n");
+      fflush(stdin);
+      scanf("%d", &color_fmt_type);
       fflush(stdin);
     }
 
@@ -1485,10 +1503,11 @@ int Init_Decoder()
 
 int Play_Decoder()
 {
-    int i, bufCnt;
+    OMX_VIDEO_PARAM_PORTFORMATTYPE videoportFmt = {0};
+    int i, bufCnt, index = 0;
     int frameSize=0;
     DEBUG_PRINT("Inside %s \n", __FUNCTION__);
-    OMX_ERRORTYPE ret;
+    OMX_ERRORTYPE ret = OMX_ErrorNone;
 
     DEBUG_PRINT("sizeof[%d]\n", sizeof(OMX_BUFFERHEADERTYPE));
 
@@ -1551,6 +1570,48 @@ int Play_Decoder()
                                                                &portFmt);
     DEBUG_PRINT("\nDec: New Min Buffer Count %d", portFmt.nBufferCountMin);
 
+    CONFIG_VERSION_SIZE(videoportFmt);
+
+    if(color_fmt_type == 0)
+    {
+        color_fmt = OMX_COLOR_FormatYUV420SemiPlanar;
+    }
+    else
+    {
+        color_fmt = (OMX_COLOR_FORMATTYPE)
+           QOMX_COLOR_FormatYUV420PackedSemiPlanar64x32Tile2m8ka;
+    }
+
+    while (ret == OMX_ErrorNone)
+    {
+        videoportFmt.nPortIndex = 1;
+        videoportFmt.nIndex = index;
+        ret = OMX_GetParameter(dec_handle, OMX_IndexParamVideoPortFormat,
+          (OMX_PTR)&videoportFmt);
+
+        if((ret == OMX_ErrorNone) && (videoportFmt.eColorFormat ==
+           color_fmt))
+        {
+            DEBUG_PRINT("\n Format[%u] supported by OMX Decoder", color_fmt);
+            break;
+        }
+        index++;
+    }
+
+    if(ret == OMX_ErrorNone)
+    {
+        if(OMX_SetParameter(dec_handle, OMX_IndexParamVideoPortFormat,
+            (OMX_PTR)&videoportFmt) != OMX_ErrorNone)
+        {
+            DEBUG_PRINT_ERROR("\n Setting Tile format failed");
+            return -1;
+        }
+    }
+    else
+    {
+        DEBUG_PRINT_ERROR("\n Error in retrieving supported color formats");
+        return -1;
+    }
 
     DEBUG_PRINT("\nVideo format, height = %d", portFmt.format.video.nFrameHeight);
     DEBUG_PRINT("\nVideo format, height = %d\n", portFmt.format.video.nFrameWidth);
@@ -2556,6 +2617,10 @@ void overlay_set()
     overlayp->src.height = sliceheight;
 #ifdef MAX_RES_720P
     overlayp->src.format = MDP_Y_CRCB_H2V2;
+    if(color_fmt == (OMX_COLOR_FORMATTYPE)QOMX_COLOR_FormatYUV420PackedSemiPlanar64x32Tile2m8ka)
+    {
+        overlayp->src.format = MDP_Y_CRCB_H2V2_TILE;
+    }
 #endif
 #ifdef MAX_RES_1080P
     overlayp->src.format = MDP_Y_CRCB_H2V2_TILE;
