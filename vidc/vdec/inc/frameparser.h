@@ -49,7 +49,8 @@ enum state_start_code_parse
    A1,
    A2,
    A3,
-   A4
+   A4,
+   A5
 };
 
 enum state_nal_parse
@@ -64,7 +65,7 @@ class frame_parse
 public:
 	H264_Utils *mutils;
 	int init_start_codes (codec_type codec_type_parse);
-	int parse_mpeg4_frame (OMX_BUFFERHEADERTYPE *source,
+	int parse_sc_frame (OMX_BUFFERHEADERTYPE *source,
                          OMX_BUFFERHEADERTYPE *dest ,
 						             OMX_U32 *partialframe);
 	int init_nal_length (unsigned int nal_length);
@@ -79,9 +80,9 @@ public:
 private:
    /*Variables for Start code based Parsing*/
    enum state_start_code_parse parse_state;
-   unsigned char start_code[4];
-   char mask_code[4];
-   unsigned char last_byte,prev_one;
+   unsigned char *start_code;
+   unsigned char *mask_code;
+   unsigned char last_byte_h263;
 
    /*Variables for NAL Length Parsing*/
    enum state_nal_parse state_nal;
