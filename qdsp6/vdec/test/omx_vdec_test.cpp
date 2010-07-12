@@ -451,7 +451,8 @@ OMX_ERRORTYPE EventHandler(OMX_IN OMX_HANDLETYPE hComponent,
             QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,
                          "OMX_EventError \n");
              currentStatus = INVALID_STATE;
-            if (OMX_ErrorInvalidState == (OMX_ERRORTYPE)nData1)
+            if (OMX_ErrorInvalidState == (OMX_ERRORTYPE)nData1 ||
+                OMX_ErrorStreamCorrupt == (OMX_ERRORTYPE)nData1)
             {
               QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,
                            "Invalid State \n");
