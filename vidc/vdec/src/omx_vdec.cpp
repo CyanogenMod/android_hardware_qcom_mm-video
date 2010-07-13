@@ -1086,6 +1086,18 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
     m_port_width              = m_width;
     m_state                   = OMX_StateLoaded;
 
+    if (m_frame_parser.mutils == NULL)
+    {
+       m_frame_parser.mutils = new H264_Utils();
+
+       if (m_frame_parser.mutils == NULL)
+       {
+          DEBUG_PRINT_ERROR("\n parser utils Allocation failed ");
+          eRet = OMX_ErrorInsufficientResources;
+       }
+       m_frame_parser.mutils->initialize_frame_checking_environment();
+    }
+
     if(pipe(fds))
     {
       DEBUG_PRINT_ERROR("pipe creation failed\n");
@@ -3132,7 +3144,6 @@ OMX_ERRORTYPE  omx_vdec::use_input_buffer(
   if(!m_inp_mem_ptr)
   {
     DEBUG_PRINT_HIGH("\n Use i/p buffer case - Header List allocation");
-    input_use_buffer = true;
     m_inp_mem_ptr = (OMX_BUFFERHEADERTYPE*) \
     calloc( (sizeof(OMX_BUFFERHEADERTYPE)), m_inp_buf_count);
 
@@ -3201,6 +3212,7 @@ OMX_ERRORTYPE  omx_vdec::use_input_buffer(
     driver_context.ptr_inputbuffer [i].pmem_fd = pmem_fd;
     driver_context.ptr_inputbuffer [i].mmaped_size = m_inp_buf_size;
     driver_context.ptr_inputbuffer [i].offset = 0;
+    driver_context.ptr_inputbuffer [i].buffer_len = bytes;
 
     setbuffers.buffer_type = VDEC_BUFFER_TYPE_INPUT;
     memcpy (&setbuffers.buffer,&driver_context.ptr_inputbuffer [i],
@@ -3218,13 +3230,14 @@ OMX_ERRORTYPE  omx_vdec::use_input_buffer(
     input = *bufferHdr;
     BITMASK_SET(&m_inp_bm_count,i);
 
-    input->pBuffer           = (OMX_U8 *)buffer;
+    input->pBuffer           = (OMX_U8 *)buf_addr;
     input->nSize             = sizeof(OMX_BUFFERHEADERTYPE);
     input->nVersion.nVersion = OMX_SPEC_VERSION;
     input->nAllocLen         = m_inp_buf_size;
-    input->pAppPrivate       = appData;
+    input->pAppPrivate       = NULL;
     input->nInputPortIndex   = OMX_CORE_INPUT_PORT_INDEX;
     input->pInputPortPrivate = (void *)&driver_context.ptr_inputbuffer [i];
+    input_use_buffer = true;
   }
   else
   {
@@ -3461,6 +3474,78 @@ OMX_ERRORTYPE  omx_vdec::use_output_buffer(
 
 /* ======================================================================
 FUNCTION
+  omx_vdec::use_input_heap_buffers
+
+DESCRIPTION
+  OMX Use Buffer Heap allocation method implementation.
+
+PARAMETERS
+  <TBD>.
+
+RETURN VALUE
+  OMX Error None , if everything successful.
+
+========================================================================== */
+OMX_ERRORTYPE  omx_vdec::use_input_heap_buffers(
+                         OMX_IN OMX_HANDLETYPE            hComp,
+                         OMX_INOUT OMX_BUFFERHEADERTYPE** bufferHdr,
+                         OMX_IN OMX_U32                   port,
+                         OMX_IN OMX_PTR                   appData,
+                         OMX_IN OMX_U32                   bytes,
+                         OMX_IN OMX_U8*                   buffer)
+{
+   DEBUG_PRINT_LOW("Inside %s, %p\n", __FUNCTION__, buffer);
+   int i;
+   h264_scratch.nAllocLen = bytes;
+   h264_scratch.pBuffer = (OMX_U8 *)malloc (bytes);
+       h264_scratch.nFilledLen = 0;
+       h264_scratch.nOffset = 0;
+
+       if (h264_scratch.pBuffer == NULL)
+       {
+         DEBUG_PRINT_ERROR("\n h264_scratch.pBuffer Allocation failed ");
+         return OMX_ErrorInsufficientResources;
+       }
+
+          m_frame_parser.mutils->allocate_rbsp_buffer (bytes);
+
+     /*Find a Free index*/
+     for(i=0; i< m_inp_buf_count; i++)
+     {
+       if(BITMASK_ABSENT(&m_heap_inp_bm_count,i))
+       {
+         DEBUG_PRINT_LOW("\n Free Input Buffer Index %d",i);
+         break;
+       }
+     }
+   // Allocation of Input Buffer headers done only in AllocateBuffer or UseBuffer.
+   // Allocation of structures done only once
+      if(0 == m_in_alloc_cnt)
+      {
+         m_inp_heap_ptr = (OMX_BUFFERHEADERTYPE*) \
+                     calloc( (sizeof(OMX_BUFFERHEADERTYPE)), m_inp_buf_count);
+         if(NULL == m_inp_heap_ptr)
+         {
+            DEBUG_PRINT_ERROR("Insufficent memory", 0, 0, 0);
+            return OMX_ErrorInsufficientResources;
+         }
+           DEBUG_PRINT_HIGH("\nAllocated buffer header posting the event callback\n");
+   }
+
+      memset(&m_inp_heap_ptr[m_in_alloc_cnt], 0, sizeof(OMX_BUFFERHEADERTYPE));
+      m_inp_heap_ptr[m_in_alloc_cnt].pBuffer = buffer;
+      m_inp_heap_ptr[m_in_alloc_cnt].nAllocLen = bytes;
+      m_inp_heap_ptr[m_in_alloc_cnt].pAppPrivate = appData;
+      m_inp_heap_ptr[m_in_alloc_cnt].nInputPortIndex = (OMX_U32) OMX_DirInput;
+      m_inp_heap_ptr[m_in_alloc_cnt].nOutputPortIndex = (OMX_U32) OMX_DirMax;
+      *bufferHdr = &m_inp_heap_ptr[m_in_alloc_cnt];
+      m_in_alloc_cnt++;
+
+   return OMX_ErrorNone;
+}
+
+/* ======================================================================
+FUNCTION
   omx_vdec::UseBuffer
 
 DESCRIPTION
@@ -3481,28 +3566,57 @@ OMX_ERRORTYPE  omx_vdec::use_buffer(
                          OMX_IN OMX_U32                   bytes,
                          OMX_IN OMX_U8*                   buffer)
 {
-    OMX_ERRORTYPE eRet = OMX_ErrorNone;
+   OMX_ERRORTYPE error = OMX_ErrorNone;
+   struct vdec_setbuffer_cmd setbuffers;
+   struct vdec_ioctl_msg ioctl_msg = {NULL,NULL};
+   int i;
+
+   if (bufferHdr == NULL || bytes == 0 || buffer == NULL)
+   {
+      DEBUG_PRINT_ERROR("bad param 0x%p %ld 0x%p",bufferHdr, bytes, buffer);
+      return OMX_ErrorBadParameter;
+   }
+     m_phdr_pmem_ptr = (OMX_BUFFERHEADERTYPE**) \
+                     calloc( (sizeof(OMX_BUFFERHEADERTYPE*)), m_inp_buf_count);
     if(m_state == OMX_StateInvalid)
     {
         DEBUG_PRINT_ERROR("Use Buffer in Invalid State\n");
         return OMX_ErrorInvalidState;
     }
     if(port == OMX_CORE_INPUT_PORT_INDEX)
-    {
-      eRet = use_input_buffer(hComp,bufferHdr,port,appData,bytes,buffer);
-    }
+   {
+      error =  use_input_heap_buffers(hComp, bufferHdr,port, NULL, bytes, buffer);
+      if (error != OMX_ErrorNone)
+      {
+        DEBUG_PRINT_ERROR("Error returned in use_buffer (Pmem allocation failed)");
+      }
+
+      error = use_input_buffer(hComp,m_phdr_pmem_ptr,port,appData,bytes,buffer);
+      if (error != OMX_ErrorNone)
+      {
+        DEBUG_PRINT_ERROR("Error returned in use_buffer (Pmem allocation failed)");
+      }
+      else{
+        /*Add the Buffers to freeq*/
+        if (!m_input_free_q.insert_entry((unsigned)m_phdr_pmem_ptr [i],NULL,NULL))
+        {
+           DEBUG_PRINT_ERROR("\nERROR:Free_q is full");
+           return OMX_ErrorInsufficientResources;
+        }
+        }
+   }
     else if(port == OMX_CORE_OUTPUT_PORT_INDEX)
     {
-      eRet = use_output_buffer(hComp,bufferHdr,port,appData,bytes,buffer);
+      error = use_output_buffer(hComp,bufferHdr,port,appData,bytes,buffer); //not tested
     }
     else
     {
       DEBUG_PRINT_ERROR("Error: Invalid Port Index received %d\n",(int)port);
-      eRet = OMX_ErrorBadPortIndex;
+      error = OMX_ErrorBadPortIndex;
     }
-    DEBUG_PRINT_LOW("Use Buffer: port %u, buffer %p, eRet %d", port, *bufferHdr, eRet);
+    DEBUG_PRINT_LOW("Use Buffer: port %u, buffer %p, eRet %d", port, *bufferHdr, error);
 
-    if(eRet == OMX_ErrorNone)
+    if(error == OMX_ErrorNone)
     {
       if(allocate_done())
       {
@@ -3536,7 +3650,7 @@ OMX_ERRORTYPE  omx_vdec::use_buffer(
         }
       }
     }
-    return eRet;
+    return error;
 }
 
 OMX_ERRORTYPE omx_vdec::free_input_buffer(OMX_BUFFERHEADERTYPE *bufferHdr)
@@ -3672,21 +3786,8 @@ OMX_ERRORTYPE omx_vdec::allocate_input_heap_buffer(OMX_HANDLETYPE       hComp,
       DEBUG_PRINT_ERROR("\n h264_scratch.pBuffer Allocation failed ");
       return OMX_ErrorInsufficientResources;
     }
-
-    if (m_frame_parser.mutils == NULL)
-    {
-       m_frame_parser.mutils = new H264_Utils();
-
-       if (m_frame_parser.mutils == NULL)
-       {
-         DEBUG_PRINT_ERROR("\n parser utils Allocation failed ");
-         return OMX_ErrorInsufficientResources;
-       }
-
-       m_frame_parser.mutils->initialize_frame_checking_environment();
        m_frame_parser.mutils->allocate_rbsp_buffer (m_inp_buf_size);
     }
-  }
 
   /*Find a Free index*/
   for(i=0; i< m_inp_buf_count; i++)
@@ -4287,8 +4388,14 @@ OMX_ERRORTYPE  omx_vdec::free_buffer(OMX_IN OMX_HANDLETYPE         hComp,
       /*Check if arbitrary bytes*/
       if (!arbitrary_bytes)
       {
-       // check if the buffer is valid
-        nPortIndex = buffer - m_inp_mem_ptr;
+         // check if the buffer is valid
+         if (input_use_buffer)
+         {
+           nPortIndex = buffer - m_inp_heap_ptr;
+         }
+         else{
+           nPortIndex = buffer - m_inp_mem_ptr;
+         }
       }
       else
       {
@@ -4300,7 +4407,18 @@ OMX_ERRORTYPE  omx_vdec::free_buffer(OMX_IN OMX_HANDLETYPE         hComp,
         {
           // Clear the bit associated with it.
           BITMASK_CLEAR(&m_inp_bm_count,nPortIndex);
-
+         if (input_use_buffer == true)
+         {
+               BITMASK_CLEAR(&m_heap_inp_bm_count,nPortIndex);
+            if (m_phdr_pmem_ptr[nPortIndex])
+            {
+               DEBUG_PRINT_LOW("\n Free pmem Buffer index %d",nPortIndex);
+               free_input_buffer(m_phdr_pmem_ptr[nPortIndex]);
+            }
+            m_inp_bPopulated = OMX_FALSE;
+         }
+         else
+         {
           if (arbitrary_bytes)
           {
             if (m_inp_heap_ptr[nPortIndex].pBuffer)
@@ -4322,7 +4440,7 @@ OMX_ERRORTYPE  omx_vdec::free_buffer(OMX_IN OMX_HANDLETYPE         hComp,
           }
 
           m_inp_bPopulated = OMX_FALSE;
-
+         }
           /*Free the Buffer Header*/
           if (release_input_done())
           {
@@ -4491,7 +4609,17 @@ OMX_ERRORTYPE  omx_vdec::empty_this_buffer(OMX_IN OMX_HANDLETYPE         hComp,
   }
   else
   {
-    nBufferIndex = buffer - m_inp_mem_ptr;
+     if (input_use_buffer == true)
+     {
+       nBufferIndex = buffer - m_inp_heap_ptr;
+       m_inp_mem_ptr[nBufferIndex].nFilledLen = m_inp_heap_ptr[nBufferIndex].nFilledLen;
+       buffer = &m_inp_mem_ptr[nBufferIndex];
+       DEBUG_PRINT_LOW("Non-Arbitrary mode - buffer address is: malloc %p, pmem%p in Index %d, buffer %p of size %d",
+                         &m_inp_heap_ptr[nBufferIndex], &m_inp_mem_ptr[nBufferIndex],nBufferIndex, buffer, buffer->nFilledLen);
+     }
+     else{
+       nBufferIndex = buffer - m_inp_mem_ptr;
+     }
   }
 
   if (nBufferIndex > m_inp_buf_count )
@@ -4581,8 +4709,15 @@ OMX_ERRORTYPE  omx_vdec::empty_this_buffer_proxy(OMX_IN OMX_HANDLETYPE         h
   {
     if (buffer->nFilledLen <= temp_buffer->buffer_len)
     {
-      memcpy (temp_buffer->bufferaddr,(buffer->pBuffer + buffer->nOffset),
-              buffer->nFilledLen);
+      if(arbitrary_bytes)
+      {
+        memcpy (temp_buffer->bufferaddr, (buffer->pBuffer + buffer->nOffset),buffer->nFilledLen);
+      }
+      else
+      {
+        memcpy (temp_buffer->bufferaddr, (m_inp_heap_ptr[nPortIndex].pBuffer + m_inp_heap_ptr[nPortIndex].nOffset),
+                buffer->nFilledLen);
+      }
     }
     else
     {
@@ -5453,6 +5588,9 @@ OMX_ERRORTYPE omx_vdec::empty_buffer_done(OMX_HANDLETYPE         hComp,
     else if(m_cb.EmptyBufferDone)
     {
         buffer->nFilledLen = 0;
+        if (input_use_buffer == true){
+            buffer = &m_inp_heap_ptr[buffer-m_inp_mem_ptr];
+        }
         m_cb.EmptyBufferDone(hComp ,m_app_data, buffer);
     }
     return OMX_ErrorNone;
