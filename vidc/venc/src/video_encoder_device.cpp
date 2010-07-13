@@ -647,9 +647,22 @@ bool venc_dev::venc_set_param(void *paramData,OMX_INDEXTYPE index )
 
         m_profile_set = false;
         m_level_set = false;
+
         if(!venc_set_profile_level (pParam->eProfile,pParam->eLevel))
         {
-          DEBUG_PRINT_ERROR("\nWARNING: Unsuccessful in updating Profile and level");
+          DEBUG_PRINT_ERROR("\nWARNING: Unsuccessful in updating Profile and level %d, %d",
+                            pParam->eProfile, pParam->eLevel);
+          return false;
+        }
+
+        if(!venc_set_entropy_config (pParam->bEntropyCodingCABAC, pParam->nCabacInitIdc))
+        {
+          DEBUG_PRINT_ERROR("\nERROR: Request for setting Entropy failed");
+          return false;
+        }
+        if(!venc_set_inloop_filter (pParam->eLoopFilterMode))
+        {
+          DEBUG_PRINT_ERROR("\nERROR: Request for setting Inloop filter failed");
           return false;
         }
       }
@@ -1352,6 +1365,73 @@ bool venc_dev::venc_set_intra_period(OMX_U32 nPFrames)
     return false;
   }
 
+  return true;
+}
+
+
+bool venc_dev::venc_set_entropy_config(OMX_BOOL enable, OMX_U32 i_cabac_level)
+{
+  venc_ioctl_msg ioctl_msg = {NULL,NULL};
+  struct venc_entropycfg entropy;
+
+  memset(&entropy,0,sizeof(entropy));
+
+  DEBUG_PRINT_LOW("\n venc_set_entropy_config: CABAC = %u", enable);
+  DEBUG_PRINT_ERROR("\n venc_set_entropy_config: CABAC = %u", enable);
+
+  if(enable){
+    entropy.longentropysel = VEN_ENTROPY_MODEL_CABAC;
+      if (i_cabac_level == 0) {
+         entropy.cabacmodel = VEN_CABAC_MODEL_0;
+      }
+      else if (i_cabac_level == 1) {
+         entropy.cabacmodel = VEN_CABAC_MODEL_1;
+      }
+      else if (i_cabac_level == 2) {
+         entropy.cabacmodel = VEN_CABAC_MODEL_2;
+      }
+  }
+  else{
+     entropy.longentropysel = VEN_ENTROPY_MODEL_CAVLC;
+  }
+
+  ioctl_msg.inputparam = (void*)&entropy;
+  ioctl_msg.outputparam = NULL;
+  if(ioctl (m_nDriver_fd,VEN_IOCTL_SET_ENTROPY_CFG,(void*)&ioctl_msg)< 0)
+  {
+    DEBUG_PRINT_ERROR("\nERROR: Request for setting entropy config failed");
+    return false;
+  }
+  printf("\n Request for setting entropy config successful");
+  return true;
+}
+
+bool venc_dev::venc_set_inloop_filter(OMX_VIDEO_AVCLOOPFILTERTYPE loopfilter)
+{
+  venc_ioctl_msg ioctl_msg = {NULL,NULL};
+  struct venc_dbcfg filter;
+
+  memset(&filter, 0, sizeof(filter));
+  DEBUG_PRINT_ERROR("\n venc_set_inloop_filter: %u",loopfilter);
+
+  if (loopfilter == OMX_VIDEO_AVCLoopFilterEnable){
+    filter.db_mode = VEN_DB_ALL_BLKG_BNDRY;
+  }
+  else if(loopfilter == OMX_VIDEO_AVCLoopFilterDisable){
+    filter.db_mode = VEN_DB_DISABLE;
+  }
+  else if(loopfilter == OMX_VIDEO_AVCLoopFilterDisableSliceBoundary){
+    filter.db_mode = VEN_DB_SKIP_SLICE_BNDRY;
+  }
+
+  ioctl_msg.inputparam = (void*)&filter;
+  ioctl_msg.outputparam = NULL;
+  if(ioctl (m_nDriver_fd,VEN_IOCTL_SET_DEBLOCKING_CFG,(void*)&ioctl_msg)< 0)
+  {
+    DEBUG_PRINT_ERROR("\nERROR: Request for setting inloop filter failed");
+    return false;
+  }
+  printf("\n Request for setting inloop filter successful");
   return true;
 }
 

@@ -480,6 +480,7 @@ result = OMX_SetParameter(m_hHandle,
       D("Configuring MP4/H264...");
 
       OMX_VIDEO_PARAM_PROFILELEVELTYPE profileLevel; // OMX_IndexParamVideoProfileLevelCurrent
+      profileLevel.nPortIndex = (OMX_U32) PORT_INDEX_OUT;
       profileLevel.eProfile = eProfile;
       profileLevel.eLevel =  eLevel;
       result = OMX_SetParameter(m_hHandle,
@@ -548,6 +549,31 @@ result = OMX_SetParameter(m_hHandle,
                                 &avcslicefmo);
       E("\n OMX_IndexParamVideoSliceFMO Set Paramter port");
       CHK(result);
+
+      OMX_VIDEO_PARAM_AVCTYPE avcdata;
+      result = OMX_GetParameter(m_hHandle,
+                                OMX_IndexParamVideoAvc,
+                                &avcdata);
+      E("\n OMX_IndexParamVideoAvc Get Parameter filter");
+      CHK(result);
+      E("\n OMX_IndexParamVideoAvc Ready to Set Parameter filter/CABAC");
+
+      printf("\n TEST profile %d Index %d ",avcdata.eProfile, avcdata.eLevel);
+
+//      avcdata.eLoopFilterMode = OMX_VIDEO_AVCLoopFilterEnable;
+
+      avcdata.eLoopFilterMode = OMX_VIDEO_AVCLoopFilterDisable;
+//      avcdata.eLoopFilterMode = OMX_VIDEO_AVCLoopFilterDisableSliceBoundary;
+
+      avcdata.bEntropyCodingCABAC = OMX_FALSE;
+   //   avcdata.bEntropyCodingCABAC = OMX_TRUE;
+      avcdata.nCabacInitIdc = 0;
+      printf("\n TEST Filter value %u ",avcdata.eLoopFilterMode);
+      result = OMX_SetParameter(m_hHandle,
+                                OMX_IndexParamVideoAvc,
+                                &avcdata);
+      CHK(result);
+      E("\n OMX_IndexParamVideoAvc Set Parameter DBK/CABAC complete");
    }
 
    OMX_VIDEO_PARAM_BITRATETYPE bitrate; // OMX_IndexParamVideoBitrate
