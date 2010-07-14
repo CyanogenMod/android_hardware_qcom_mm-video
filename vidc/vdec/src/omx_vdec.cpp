@@ -84,7 +84,12 @@ char outputfilename [] = "/data/output.yuv";
 #define VC1_STRUCT_A_POS            12
 #define VC1_STRUCT_B_POS            24
 #define VC1_SEQ_LAYER_SIZE          36
-
+#ifdef MAX_RES_720P
+#define PMEM_DEVICE "/dev/pmem_adsp"
+#endif
+#ifdef MAX_RES_1080P
+#define PMEM_DEVICE "/dev/pmem_smipool"
+#endif
 #ifdef _ANDROID_
     extern "C"{
         #include<utils/Log.h>
@@ -238,7 +243,7 @@ void *get_omx_component_factory_fn(void)
 VideoHeap::VideoHeap(int fd, size_t size, void* base)
 {
     // dup file descriptor, map once, use pmem
-    init(dup(fd), base, size, 0 , "/dev/pmem_adsp");
+    init(dup(fd), base, size, 0 , PMEM_DEVICE);
 }
 #endif // _ANDROID_
 
@@ -3176,7 +3181,7 @@ OMX_ERRORTYPE  omx_vdec::use_input_buffer(
 
   if(i < m_inp_buf_count)
   {
-    pmem_fd = open ("/dev/pmem_adsp",O_RDWR);
+    pmem_fd = open (PMEM_DEVICE,O_RDWR);
 
     if (pmem_fd < 0)
     {
@@ -3185,7 +3190,7 @@ OMX_ERRORTYPE  omx_vdec::use_input_buffer(
 
     if(pmem_fd == 0)
     {
-      pmem_fd = open ("/dev/pmem_adsp",O_RDWR);
+      pmem_fd = open (PMEM_DEVICE,O_RDWR);
       if (pmem_fd < 0)
       {
         return OMX_ErrorInsufficientResources;
@@ -3418,7 +3423,7 @@ OMX_ERRORTYPE  omx_vdec::use_output_buffer(
     if(i < m_out_buf_count)
     {
       driver_context.ptr_outputbuffer[i].pmem_fd = \
-        open ("/dev/pmem_adsp",O_RDWR);
+        open (PMEM_DEVICE,O_RDWR);
 
       if (driver_context.ptr_outputbuffer[i].pmem_fd < 0)
       {
@@ -3428,7 +3433,7 @@ OMX_ERRORTYPE  omx_vdec::use_output_buffer(
       if(driver_context.ptr_outputbuffer[i].pmem_fd == 0)
       {
         driver_context.ptr_outputbuffer[i].pmem_fd = \
-          open ("/dev/pmem_adsp",O_RDWR);
+          open (PMEM_DEVICE,O_RDWR);
 
         if (driver_context.ptr_outputbuffer[i].pmem_fd < 0)
         {
@@ -3914,7 +3919,7 @@ OMX_ERRORTYPE  omx_vdec::allocate_input_buffer(
   if(i < m_inp_buf_count)
   {
     DEBUG_PRINT_LOW("\n Allocate input Buffer");
-    pmem_fd = open ("/dev/pmem_adsp",O_RDWR);
+    pmem_fd = open (PMEM_DEVICE,O_RDWR);
 
     if (pmem_fd < 0)
     {
@@ -3924,7 +3929,7 @@ OMX_ERRORTYPE  omx_vdec::allocate_input_buffer(
 
     if (pmem_fd == 0)
     {
-      pmem_fd = open ("/dev/pmem_adsp",O_RDWR);
+      pmem_fd = open (PMEM_DEVICE,O_RDWR);
 
       if (pmem_fd < 0)
       {
@@ -4049,7 +4054,7 @@ OMX_ERRORTYPE  omx_vdec::allocate_output_buffer(
     DEBUG_PRINT_LOW("PE %d OutputBuffer Count %d \n",nPlatformEntrySize,
                          m_out_buf_count);
 
-    pmem_fd = open ("/dev/pmem_adsp",O_RDWR);
+    pmem_fd = open (PMEM_DEVICE,O_RDWR);
 
     if (pmem_fd < 0)
     {
@@ -4059,7 +4064,7 @@ OMX_ERRORTYPE  omx_vdec::allocate_output_buffer(
 
     if(pmem_fd == 0)
     {
-      pmem_fd = open ("/dev/pmem_adsp",O_RDWR);
+      pmem_fd = open (PMEM_DEVICE,O_RDWR);
 
       if (pmem_fd < 0)
       {
