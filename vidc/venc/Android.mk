@@ -48,6 +48,13 @@ libmm-venc-def += -DENABLE_DEBUG_HIGH
 libmm-venc-def += -DENABLE_DEBUG_ERROR
 libmm-venc-def += -UINPUT_BUFFER_LOG
 libmm-venc-def += -UOUTPUT_BUFFER_LOG
+ifeq "$(findstring msm7630,$(TARGET_PRODUCT))" "msm7630"
+libmm-venc-def += -DMAX_RES_720P
+endif
+ifeq "$(findstring msm8660,$(TARGET_PRODUCT))" "msm8660"
+libmm-venc-def += -DMAX_RES_1080P
+endif
+
 
 # ---------------------------------------------------------------------------------
 # 			Make the Shared library (libOmxVenc)

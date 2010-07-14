@@ -87,6 +87,14 @@ typedef struct OMXComponentCapabilityFlagsType
 extern FILE *outputBufferFile1;
 #endif
 
+#ifdef MAX_RES_720P
+static const char* PMEM_DEVICE = "/dev/pmem_adsp";
+#elif MAX_RES_1080P
+static const char* PMEM_DEVICE = "/dev/pmem_smipool";
+#else
+#error PMEM_DEVICE cannot be determined.
+#endif
+
 void* message_thread(void *input)
 {
   omx_video* omx = reinterpret_cast<omx_video*>(input);
@@ -194,7 +202,7 @@ unsigned omx_video::omx_cmd_queue::get_q_msg_type()
 VideoHeap::VideoHeap(int fd, size_t size, void* base)
 {
   // dup file descriptor, map once, use pmem
-  init(dup(fd), base, size, 0 , "/dev/pmem_adsp");
+  init(dup(fd), base, size, 0 , PMEM_DEVICE);
 }
 #endif // _ANDROID_
 
@@ -1936,10 +1944,10 @@ OMX_ERRORTYPE  omx_video::use_input_buffer(
 
     if(!m_use_input_pmem)
     {
-      m_pInput_pmem[i].fd = open ("/dev/pmem_adsp",O_RDWR);
+      m_pInput_pmem[i].fd = open (PMEM_DEVICE,O_RDWR);
       if(m_pInput_pmem[i].fd == 0)
       {
-        m_pInput_pmem[i].fd = open ("/dev/pmem_adsp",O_RDWR);
+        m_pInput_pmem[i].fd = open (PMEM_DEVICE,O_RDWR);
       }
 
       if(m_pInput_pmem[i] .fd < 0)
@@ -2107,11 +2115,11 @@ OMX_ERRORTYPE  omx_video::use_output_buffer(
 
       if(!m_use_output_pmem)
       {
-        m_pOutput_pmem[i].fd = open ("/dev/pmem_adsp",O_RDWR);
+        m_pOutput_pmem[i].fd = open (PMEM_DEVICE,O_RDWR);
 
         if(m_pOutput_pmem[i].fd == 0)
         {
-          m_pOutput_pmem[i].fd = open ("/dev/pmem_adsp",O_RDWR);
+          m_pOutput_pmem[i].fd = open (PMEM_DEVICE,O_RDWR);
         }
 
         if(m_pOutput_pmem[i].fd < 0)
@@ -2418,11 +2426,11 @@ OMX_ERRORTYPE  omx_video::allocate_input_buffer(
     (*bufferHdr)->pAppPrivate       = appData;
     (*bufferHdr)->nInputPortIndex   = PORT_INDEX_IN;
 
-    m_pInput_pmem[i].fd = open ("/dev/pmem_adsp",O_RDWR);
+    m_pInput_pmem[i].fd = open (PMEM_DEVICE,O_RDWR);
 
     if(m_pInput_pmem[i].fd == 0)
     {
-      m_pInput_pmem[i].fd = open ("/dev/pmem_adsp",O_RDWR);
+      m_pInput_pmem[i].fd = open (PMEM_DEVICE,O_RDWR);
     }
 
     if(m_pInput_pmem[i].fd < 0)
@@ -2543,10 +2551,10 @@ OMX_ERRORTYPE  omx_video::allocate_output_buffer(
   {
     if(i < m_sOutPortDef.nBufferCountActual)
     {
-      m_pOutput_pmem[i].fd = open ("/dev/pmem_adsp",O_RDWR);
+      m_pOutput_pmem[i].fd = open (PMEM_DEVICE,O_RDWR);
       if(m_pOutput_pmem[i].fd == 0)
       {
-        m_pOutput_pmem[i].fd = open ("/dev/pmem_adsp",O_RDWR);
+        m_pOutput_pmem[i].fd = open (PMEM_DEVICE,O_RDWR);
       }
 
       if(m_pOutput_pmem[i].fd < 0)
