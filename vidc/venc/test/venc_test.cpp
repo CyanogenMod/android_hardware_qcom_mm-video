@@ -1075,6 +1075,34 @@ void usage(char* filename)
    fprintf(stderr, "       RateControl (Values 0 - 4 for RC_OFF, RC_CBR_CFR, RC_CBR_VFR, RC_VBR_CFR, RC_VBR_VFR\n");
    exit(1);
 }
+
+bool parseWxH(char *str, OMX_U32 *width, OMX_U32 *height)
+{
+   bool parseOK = false;
+   const char delimiters[] = " x*,";
+   char *token, *dupstr;
+   OMX_U32 w, h;
+
+   dupstr = strdup(str);
+   token = strtok(dupstr, delimiters);
+   if (token)
+   {
+       w = strtoul(token, NULL, 10);
+       token = strtok(NULL, delimiters);
+       if (token)
+       {
+           h = strtoul(token, NULL, 10);
+           if (w != ULONG_MAX && h != ULONG_MAX)
+           {
+               parseOK = true;
+               *width = w;
+               *height = h;
+           }
+       }
+   }
+   return parseOK;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 void parseArgs(int argc, char** argv)
 {
@@ -1247,35 +1275,30 @@ void parseArgs(int argc, char** argv)
       m_sProfile.eLevel = OMX_VIDEO_MPEG4Level1;
    }
   else if (strcmp("CIF", argv[2]) == 0 ||
-            strcmp("CIF", argv[2]) == 0)
+            strcmp("cif", argv[2]) == 0)
    {
       m_sProfile.nFrameWidth = 352;
       m_sProfile.nFrameHeight = 288;
       m_sProfile.nFrameBytes = 352*288*3/2;
       m_sProfile.eLevel = OMX_VIDEO_MPEG4Level1;
    }
-   else if (strcmp("720", argv[2]) == 0 ||
-            strcmp("720", argv[2]) == 0)
+   else if (strcmp("720", argv[2]) == 0)
    {
       m_sProfile.nFrameWidth = 1280;
       m_sProfile.nFrameHeight = 720;
       m_sProfile.nFrameBytes = 720*1280*3/2;
       m_sProfile.eLevel = OMX_VIDEO_MPEG4Level1;
    }
-   else if (strcmp("1920x1088", argv[2]) == 0 ||
-            strcmp("1920X1088", argv[2]) == 0)
+   else if (strcmp("1080", argv[2]) == 0)
    {
       m_sProfile.nFrameWidth = 1920;
-      m_sProfile.nFrameHeight = 1088;
-      m_sProfile.nFrameBytes = 1920*1088*3/2;
+      m_sProfile.nFrameHeight = 1080;
+      m_sProfile.nFrameBytes = 1920*1080*3/2;
       m_sProfile.eLevel = OMX_VIDEO_MPEG4Level1;
    }
-   else if (strcmp("1920x816", argv[2]) == 0 ||
-            strcmp("1920X816", argv[2]) == 0)
+   else if (parseWxH(argv[2], &m_sProfile.nFrameWidth, &m_sProfile.nFrameHeight))
    {
-      m_sProfile.nFrameWidth = 1920;
-      m_sProfile.nFrameHeight = 816;
-      m_sProfile.nFrameBytes = 1920*816*3/2;
+      m_sProfile.nFrameBytes = m_sProfile.nFrameWidth*m_sProfile.nFrameHeight*3/2;
       m_sProfile.eLevel = OMX_VIDEO_MPEG4Level1;
    }
    else
