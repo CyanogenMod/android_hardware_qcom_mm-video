@@ -2317,7 +2317,7 @@ OMX_ERRORTYPE omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE hComp,
                portDefn->nBufferCountMin =
                    m_out_buf_count;
             }
-            extraDataSize = get_extradata_size();
+            extraDataSize = getExtraDataSize();
             if (m_color_format == QOMX_COLOR_FormatYVU420PackedSemiPlanar32m4ka) {
                portDefn->nBufferSize = (m_port_width * m_port_height + 4095) & ~4095;
                chroma_height = ((m_port_height >> 1) + 31) & ~31;
@@ -9832,6 +9832,38 @@ void omx_vdec::fill_extradata(OMX_INOUT OMX_BUFFERHEADERTYPE * pBufHdr,
       pExtraFrameDimension->nDecHeight = frameDetails->nDecPicHeight;
       pExtraFrameDimension->nActualWidth = frameDetails->cwin.x2 - frameDetails->cwin.x1;
       pExtraFrameDimension->nActualHeight= frameDetails->cwin.y2 - frameDetails->cwin.y1;
+   }
+
+   /* khronos standardized way of converying interlaced info */
+   OMX_STREAMINTERLACEFORMATTYPE *pInterlaceInfo=NULL;
+
+   size =
+       (OMX_EXTRADATA_HEADER_SIZE + sizeof(OMX_STREAMINTERLACEFORMATTYPE) +
+        3) & (~3);
+   pExtraData->nSize = size;
+   pExtraData->nVersion.nVersion = OMX_SPEC_VERSION;
+   pExtraData->nPortIndex = 1;
+   pExtraData->eType = (OMX_EXTRADATATYPE) OMX_ExtraDataInterlaceFormat;   /* Extra Data type */
+   pExtraData->nDataSize = sizeof(OMX_STREAMINTERLACEFORMATTYPE);   /* Size of the supporting data to follow */
+   pInterlaceInfo = (OMX_STREAMINTERLACEFORMATTYPE *) pExtraData->data;
+   pInterlaceInfo ->nSize = sizeof(OMX_STREAMINTERLACEFORMATTYPE);
+   pInterlaceInfo ->nVersion.nVersion = OMX_SPEC_VERSION;
+   pInterlaceInfo ->nPortIndex = 1;
+
+   if (frameDetails->ePicFormat == VDEC_PROGRESSIVE_FRAME)
+   {
+       pInterlaceInfo ->bInterlaceFormat = OMX_FALSE;
+       pInterlaceInfo ->nInterlaceFormats = OMX_InterlaceFrameProgressive;
+   }
+   else if (frameDetails->ePicFormat = VDEC_INTERLACED_FRAME)
+   {
+      pInterlaceInfo ->bInterlaceFormat = OMX_TRUE;
+      if (frameDetails->bTopFieldFirst)
+       pInterlaceInfo ->nInterlaceFormats =
+             OMX_InterlaceInterleaveFrameTopFieldFirst;
+      else
+       pInterlaceInfo ->nInterlaceFormats =
+             OMX_InterlaceInterleaveFrameBottomFieldFirst;
    }
 
    // append extradata terminator

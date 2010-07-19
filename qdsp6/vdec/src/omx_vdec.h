@@ -448,9 +448,9 @@ class omx_vdec:public qc_omx_component, public omx_vdec_inpbuf {
          buffer_size = (m_port_height * m_port_width + 4095) & ~4095;
          chroma_height = ((m_port_height >> 1) + 31) & ~31;
          chroma_width = 2 * ((m_port_width >> 1) + 31) & ~31;
-         buffer_size += (chroma_height * chroma_width) + get_extradata_size();
+         buffer_size += (chroma_height * chroma_width) + getExtraDataSize();
        } else {
-          buffer_size = m_port_height * m_port_width * 3/2  + get_extradata_size();
+          buffer_size = m_port_height * m_port_width * 3/2  + getExtraDataSize();
        }
        return buffer_size;
    } inline void omx_vdec_set_use_buf_flg() {
@@ -524,10 +524,6 @@ class omx_vdec:public qc_omx_component, public omx_vdec_inpbuf {
                   bufferHdr, OMX_IN OMX_U32 port,
                   OMX_IN OMX_PTR appData,
                   OMX_IN void *eglImage);
-
-   int get_extradata_size(void)
-   {
-       return ((OMX_EXTRADATA_HEADER_SIZE + sizeof(OMX_QCOM_EXTRADATA_FRAMEINFO)+3) & (~3))+((OMX_EXTRADATA_HEADER_SIZE+sizeof(OMX_QCOM_EXTRADATA_CODEC_DATA)+3) & (~3))+((OMX_EXTRADATA_HEADER_SIZE+sizeof(OMX_QCOM_EXTRADATA_FRAMEDIMENSION) + 3) & (~3))+(OMX_EXTRADATA_HEADER_SIZE + 4);                                                                                                                   }
 
    void fill_extradata(OMX_INOUT OMX_BUFFERHEADERTYPE * pBufHdr,
              OMX_IN vdec_frame * frame);

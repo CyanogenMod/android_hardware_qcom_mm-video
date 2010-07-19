@@ -488,6 +488,12 @@ typedef enum PostProc_Flags{
                int *nFlushedFrames,
                Vdec_PortType port);
 
+/* funtion tells the size of extra data that needs to be appended at the end of 
+ * o/p buffer
+ */
+int getExtraDataSize(void);
+
+
 #ifdef USE_PMEM_ADSP_CACHED
 /**
   * This method is used to perform cache operations on the pmem region in the decoder.
