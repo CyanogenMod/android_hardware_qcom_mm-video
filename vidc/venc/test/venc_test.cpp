@@ -366,6 +366,14 @@ OMX_ERRORTYPE ConfigureEncoder()
                              &portdef);
    E("\n OMX_IndexParamPortDefinition Set Paramter on input port");
    CHK(result);
+   // once more to get proper buffer size
+   result = OMX_GetParameter(m_hHandle,
+                             OMX_IndexParamPortDefinition,
+                             &portdef);
+   E("\n OMX_IndexParamPortDefinition Get Paramter on input port, 2nd pass");
+   CHK(result);
+   // update size accordingly
+   m_sProfile.nFrameBytes = portdef.nBufferSize;
    portdef.nPortIndex = (OMX_U32) 1; // output
    result = OMX_GetParameter(m_hHandle,
                              OMX_IndexParamPortDefinition,
@@ -912,12 +920,41 @@ OMX_ERRORTYPE VencTest_ReadAndEmpty(OMX_BUFFERHEADERTYPE* pYUVBuffer)
 {
    OMX_ERRORTYPE result = OMX_ErrorNone;
 #ifdef T_ARM
+#ifdef MAX_RES_720P
    if (read(m_nInFd,
             pYUVBuffer->pBuffer,
             m_sProfile.nFrameBytes) != m_sProfile.nFrameBytes)
    {
       return OMX_ErrorUndefined;
    }
+#else
+         OMX_U32 bytestoread = m_sProfile.nFrameWidth*m_sProfile.nFrameHeight;
+         // read Y first
+         if (read(m_nInFd,
+              pYUVBuffer->pBuffer,
+              bytestoread) != bytestoread)
+            return OMX_ErrorUndefined;
+
+         // check alignment for offset to C
+         OMX_U32 offset_to_c = m_sProfile.nFrameWidth * m_sProfile.nFrameHeight;
+
+         const OMX_U32 C_2K = (1024*2),
+            MASK_2K = C_2K-1,
+            IMASK_2K = ~MASK_2K;
+
+         if (offset_to_c & MASK_2K)
+         {
+            // offset to C is not 2k aligned, adjustment is required
+            offset_to_c = (offset_to_c & IMASK_2K) + C_2K;
+         }
+
+         bytestoread = m_sProfile.nFrameWidth*m_sProfile.nFrameHeight/2;
+         // read C
+         if (read(m_nInFd,
+              pYUVBuffer->pBuffer + offset_to_c,
+              bytestoread)!= bytestoread)
+            return OMX_ErrorUndefined;
+#endif
 #else
    {
 	  char * pInputbuf = (char *)(pYUVBuffer->pBuffer) ;
@@ -1217,6 +1254,22 @@ void parseArgs(int argc, char** argv)
       m_sProfile.nFrameBytes = 720*1280*3/2;
       m_sProfile.eLevel = OMX_VIDEO_MPEG4Level1;
    }
+   else if (strcmp("1920x1088", argv[2]) == 0 ||
+            strcmp("1920X1088", argv[2]) == 0)
+   {
+      m_sProfile.nFrameWidth = 1920;
+      m_sProfile.nFrameHeight = 1088;
+      m_sProfile.nFrameBytes = 1920*1088*3/2;
+      m_sProfile.eLevel = OMX_VIDEO_MPEG4Level1;
+   }
+   else if (strcmp("1920x816", argv[2]) == 0 ||
+            strcmp("1920X816", argv[2]) == 0)
+   {
+      m_sProfile.nFrameWidth = 1920;
+      m_sProfile.nFrameHeight = 816;
+      m_sProfile.nFrameBytes = 1920*816*3/2;
+      m_sProfile.eLevel = OMX_VIDEO_MPEG4Level1;
+   }
    else
    {
       usage(argv[0]);
@@ -1458,9 +1511,34 @@ int main(int argc, char** argv)
       for (i = 0; i < num_in_buffers; i++)
       {
         D("[%d] address 0x%x",i, m_pInBuffers[i]->pBuffer);
+#ifdef MAX_RES_720P
          read(m_nInFd,
               m_pInBuffers[i]->pBuffer,
               m_sProfile.nFrameBytes);
+#else
+         // read Y first
+         read(m_nInFd,
+              m_pInBuffers[i]->pBuffer,
+              m_sProfile.nFrameWidth*m_sProfile.nFrameHeight);
+
+         // check alignment for offset to C
+         OMX_U32 offset_to_c = m_sProfile.nFrameWidth * m_sProfile.nFrameHeight;
+
+         const OMX_U32 C_2K = (1024*2),
+            MASK_2K = C_2K-1,
+            IMASK_2K = ~MASK_2K;
+
+         if (offset_to_c & MASK_2K)
+         {
+            // offset to C is not 2k aligned, adjustment is required
+            offset_to_c = (offset_to_c & IMASK_2K) + C_2K;
+         }
+
+         // read C
+         read(m_nInFd,
+              m_pInBuffers[i]->pBuffer + offset_to_c,
+              m_sProfile.nFrameWidth*m_sProfile.nFrameHeight/2);
+#endif
 
       }
 

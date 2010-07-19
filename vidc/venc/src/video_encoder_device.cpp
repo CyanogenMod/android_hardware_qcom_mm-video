@@ -352,8 +352,7 @@ bool venc_dev::venc_get_buf_req(unsigned long *min_buff_count,
     }
     *min_buff_count = m_sInput_buff_property.mincount;
     *actual_buff_count = m_sInput_buff_property.actualcount;
-    *buff_size = m_sInput_buff_property.datasize
-                 + (m_sInput_buff_property.datasize % m_sInput_buff_property.alignment) ;
+    *buff_size = m_sInput_buff_property.datasize;
   }
   else
   {
@@ -366,8 +365,7 @@ bool venc_dev::venc_get_buf_req(unsigned long *min_buff_count,
     }
     *min_buff_count = m_sOutput_buff_property.mincount;
     *actual_buff_count = m_sOutput_buff_property.actualcount;
-    *buff_size = m_sOutput_buff_property.datasize
-                 + (m_sOutput_buff_property.datasize % m_sOutput_buff_property.alignment) ;
+    *buff_size = m_sOutput_buff_property.datasize;
   }
 
   return true;
@@ -377,7 +375,6 @@ bool venc_dev::venc_get_buf_req(unsigned long *min_buff_count,
 bool venc_dev::venc_set_param(void *paramData,OMX_INDEXTYPE index )
 {
   venc_ioctl_msg ioctl_msg = {NULL,NULL};
-  OMX_U32 temp_out_buf_count = 0;
   DEBUG_PRINT_LOW("venc_set_param:: venc-720p\n");
   switch(index)
   {
@@ -399,7 +396,6 @@ bool venc_dev::venc_set_param(void *paramData,OMX_INDEXTYPE index )
           m_sVenc_cfg.input_height = portDefn->format.video.nFrameHeight;
           m_sVenc_cfg.input_width = portDefn->format.video.nFrameWidth;
 
-          temp_out_buf_count = m_sOutput_buff_property.actualcount;
           ioctl_msg.inputparam = (void*)&m_sVenc_cfg;
           ioctl_msg.outputparam = NULL;
           if(ioctl (m_nDriver_fd,VEN_IOCTL_SET_BASE_CFG,(void*)&ioctl_msg) < 0)
@@ -436,7 +432,6 @@ bool venc_dev::venc_set_param(void *paramData,OMX_INDEXTYPE index )
                       m_sOutput_buff_property.maxcount, m_sOutput_buff_property.actualcount,
                       m_sOutput_buff_property.mincount);
 
-          m_sOutput_buff_property.actualcount = temp_out_buf_count;
           ioctl_msg.inputparam = (void*)&m_sOutput_buff_property;
           ioctl_msg.outputparam = NULL;
           if(ioctl (m_nDriver_fd, VEN_IOCTL_SET_OUTPUT_BUFFER_REQ,(void*)&ioctl_msg) < 0)
