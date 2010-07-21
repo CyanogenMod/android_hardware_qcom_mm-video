@@ -2054,7 +2054,6 @@ bool omx_vdec::execute_input_flush(void)
                      m_current_arbitrary_bytes_input);
             m_current_arbitrary_bytes_input->nFilledLen =
                                      m_current_arbitrary_bytes_input->nOffset;
-            m_current_arbitrary_bytes_input->nOffset = 0;
             index = get_free_extra_buffer_index();
             if (index != -1) {
                QTV_MSG_PRIO1(QTVDIAG_GENERAL,
@@ -2089,6 +2088,10 @@ bool omx_vdec::execute_input_flush(void)
             pInpBufHdr = (OMX_BUFFERHEADERTYPE *) p2;
             m_extra_buf_info[index].arbitrarybytesInput =
                 pInpBufHdr;
+/* since these buffers are not processed by vdec, below statment should make sure that the
+   nFilledLen is not zero, so that client knows that vdec didnt consume the buffer*/
+            m_extra_buf_info[i].arbitrarybytesInput->nOffset=
+               m_extra_buf_info[i].arbitrarybytesInput->nFilledLen;
             //post_event((unsigned)&m_vdec_cfg,(unsigned)pInpBufHdr,OMX_COMPONENT_GENERATE_BUFFER_DONE);
          }
          for (i = 0; i < m_inp_buf_count; i++) {
