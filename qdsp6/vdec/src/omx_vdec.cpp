@@ -7735,8 +7735,12 @@ OMX_ERRORTYPE omx_vdec::omx_vdec_validate_port_param(int height, int width) {
 
    if (hxw > (OMX_CORE_720P_HEIGHT * OMX_CORE_720P_WIDTH)) {
       ret = OMX_ErrorNotImplemented;
-      QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
-               "Invalid Ht[%d] wdth[%d]\n", height, width);
+      QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+               "-----Invalid Ht[%d] wdth[%d]----", height, width);
+      QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+               "--Max supported is 720 x 1280---", height, width);
+      QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+               "-------Aborting session---------", height, width);
    }
    return ret;
 }
