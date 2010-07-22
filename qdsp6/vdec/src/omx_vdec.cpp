@@ -6797,10 +6797,22 @@ OMX_ERRORTYPE omx_vdec::component_deinit(OMX_IN OMX_HANDLETYPE hComp) {
       m_vendor_config.pData = NULL;
    }
 #ifdef _ANDROID_
+   /* get strong count gets the refernce count of the pmem, the count will
+    * be incremented by our kernal driver and surface flinger, by the time
+    * we close the pmem, this cound needs to be zero, but there is no way
+    * for us to know when surface flinger reduces its cound, so we wait
+    * here in a infinite loop till the count is zero
+    */
+   while(1)
+   {
+      if ( (/*for getting count */ (m_heap_ptr.get())->getStrongCount()) == 1)
+         break;
+      else
+         usleep(10);
+   }
    // Clear the strong reference
    m_heap_ptr.clear();
-#endif // _ANDROID_
-   omx_vdec_free_output_port_memory();
+#endif // _ANDROID_    omx_vdec_free_output_port_memory();
 
    return OMX_ErrorNone;
 }
