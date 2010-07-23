@@ -5875,13 +5875,25 @@ OMX_ERRORTYPE omx_vdec::
                         "Copy the new buffer to the current frame allocLen %d\n",
                         m_pcurrent_frame->
                         nAllocLen);
-               memcpy(m_pcurrent_frame->pBuffer +
-                      m_pcurrent_frame->nFilledLen,
-                      buffer->pBuffer +
-                      buffer->nOffset,
-                      buffer->nFilledLen);
-               m_pcurrent_frame->nFilledLen +=
-                   buffer->nFilledLen;
+               if (m_pcurrent_frame->nAllocLen >=
+                  (m_pcurrent_frame->nFilledLen +buffer->nFilledLen)){
+                  memcpy(m_pcurrent_frame->pBuffer +
+                         m_pcurrent_frame->nFilledLen,
+                         buffer->pBuffer +
+                         buffer->nOffset,
+                         buffer->nFilledLen);
+                  m_pcurrent_frame->nFilledLen +=
+                      buffer->nFilledLen;
+               }
+               else{
+                  QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+                          "Frame size too high [%d], Aborting session\n",(m_pcurrent_frame->nFilledLen +buffer->nFilledLen));
+                  m_bInvalidState = true;
+                  m_cb.EventHandler(&m_cmp, m_app_data, OMX_EventError,
+                          OMX_ErrorStreamCorrupt, 0, NULL);
+                  return OMX_ErrorStreamCorrupt;
+               }
+
             } else
                 if (find_extra_buffer_index(buffer->pBuffer)
                != -1) {
