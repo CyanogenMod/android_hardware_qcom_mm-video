@@ -266,6 +266,14 @@ static bool m_bWatchDogKicked = false;
 static long long tot_bufsize = 0;
 int ebd_cnt=0, fbd_cnt=0;
 
+#ifdef MAX_RES_720P
+static const char* PMEM_DEVICE = "/dev/pmem_adsp";
+#elif MAX_RES_1080P
+static const char* PMEM_DEVICE = "/dev/pmem_smipool";
+#else
+#error PMEM_DEVICE cannot be determined.
+#endif
+
 //////////////////////////
 // MODULE FUNCTIONS
 //////////////////////////
@@ -277,7 +285,7 @@ void* PmemMalloc(OMX_QCOM_PLATFORM_PRIVATE_PMEM_INFO* pMem, int nSize)
    if (!pMem)
       return NULL;
 
-   pMem->pmem_fd = open("/dev/pmem_adsp", O_RDWR);
+   pMem->pmem_fd = open(PMEM_DEVICE, O_RDWR);
    if ((int)(pMem->pmem_fd) < 0)
       return NULL;
    nSize = (nSize + 4095) & (~4095);
