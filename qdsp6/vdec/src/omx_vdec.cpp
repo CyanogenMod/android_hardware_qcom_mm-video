@@ -742,6 +742,8 @@ void omx_vdec::buffer_done_cb(struct vdec_context *ctxt, void *cookie)
                    buffer_done_cb_arbitrarybytes(ctxt,
                              cookie);
             } else {
+            QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                    "buffer Done %x",bufHdr->pBuffer);
                pThis->m_cb.EmptyBufferDone(&pThis->
                             m_cmp,
                             pThis->
@@ -793,27 +795,37 @@ void omx_vdec::buffer_done_cb_arbitrarybytes(struct vdec_context *ctxt,
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
               "buffer Done callback - end of arbitrary bytes buffer!!\n");
       pThis->free_extra_buffer(extra_buf_index);
-      unsigned int nPortIndex =
-          pThis->m_extra_buf_info[extra_buf_index].
-          arbitrarybytesInput -
-          (OMX_BUFFERHEADERTYPE *) pThis->
-          m_arbitrary_bytes_input_mem_ptr;
-      if (nPortIndex < MAX_NUM_INPUT_BUFFERS) {
-         pThis->m_cb.EmptyBufferDone(&pThis->m_cmp,
-                      pThis->m_app_data,
-                      pThis->
-                      m_extra_buf_info
-                      [extra_buf_index].
-                      arbitrarybytesInput);
-         pThis->m_extra_buf_info[extra_buf_index].
-             arbitrarybytesInput = NULL;
-         pThis->push_pending_buffers_proxy();
-      } else {
-         QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
-                  "Incorrect previous arbitrary bytes buffer %p\n",
-                  pThis->m_extra_buf_info[extra_buf_index].
-                  arbitrarybytesInput);
-      }
+      if (pThis->m_extra_buf_info[extra_buf_index].arbitrarybytesInput)
+      {
+         unsigned int nPortIndex =
+             pThis->m_extra_buf_info[extra_buf_index].
+             arbitrarybytesInput -
+             (OMX_BUFFERHEADERTYPE *) pThis->
+             m_arbitrary_bytes_input_mem_ptr;
+         if (nPortIndex < MAX_NUM_INPUT_BUFFERS) {
+            QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                       "buffer Done arb %x",pThis->m_extra_buf_info[extra_buf_index].arbitrarybytesInput->pBuffer);
+            pThis->m_cb.EmptyBufferDone(&pThis->m_cmp,
+                         pThis->m_app_data,
+                         pThis->
+                         m_extra_buf_info
+                         [extra_buf_index].
+                         arbitrarybytesInput);
+            pThis->m_extra_buf_info[extra_buf_index].
+                arbitrarybytesInput = NULL;
+            pThis->push_pending_buffers_proxy();
+         } else {
+            QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
+                     "Incorrect previous arbitrary bytes buffer %p\n",
+                     pThis->m_extra_buf_info[extra_buf_index].
+                     arbitrarybytesInput);
+         }
+     }
+    else
+    {
+      QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH, "arbitrarybytesInput NULL");
+      pThis->push_pending_buffers_proxy();
+    }
    }
 
    QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
@@ -944,6 +956,9 @@ void omx_vdec::process_event_cb(struct vdec_context *ctxt, unsigned char id)
                }
                /* posting error events for illegal state transition */
                else if (p1 == OMX_EventError) {
+                  QTV_MSG_PRIO1(QTVDIAG_GENERAL,
+                           QTVDIAG_PRIO_ERROR,
+                           "-------Error %x------",p2);
                   if (p2 == OMX_ErrorInvalidState) {
                      pThis->m_state =
                          OMX_StateInvalid;
@@ -2263,7 +2278,7 @@ OMX_ERRORTYPE omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE hComp,
             if (!m_inp_buf_count) {
                if (VDEC_SUCCESS !=
                    vdec_get_input_buf_requirements
-                   (&bufferReq)) {
+                   (&bufferReq, m_vdec_cfg.postProc)) {
                   QTV_MSG_PRIO(QTVDIAG_GENERAL,
                           QTVDIAG_PRIO_ERROR,
                           "get_parameter: ERROR - Failed in get input buffer requirement\n");
@@ -2279,8 +2294,7 @@ OMX_ERRORTYPE omx_vdec::get_parameter(OMX_IN OMX_HANDLETYPE hComp,
                }
             }
             portDefn->nBufferCountActual = m_inp_buf_count;
-            portDefn->nBufferCountMin =
-                OMX_CORE_NUM_INPUT_BUFFERS;
+            portDefn->nBufferCountMin = m_inp_buf_count;                //OMX_CORE_NUM_INPUT_BUFFERS;
             portDefn->nBufferSize = m_inp_buf_size;
             portDefn->eDir = OMX_DirInput;
             portDefn->format.video.eColorFormat =
@@ -2873,8 +2887,7 @@ OMX_ERRORTYPE omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE hComp,
                 OMX_CORE_NUM_INPUT_BUFFERS) {
                m_inp_buf_count =
                    portDefn->nBufferCountActual;
-            } else if (portDefn->nBufferCountActual <
-                  OMX_CORE_NUM_INPUT_BUFFERS) {
+            } else if (portDefn->nBufferCountActual < OMX_CORE_MIN_INPUT_BUFFERS) {
                QTV_MSG_PRIO1(QTVDIAG_GENERAL,
                         QTVDIAG_PRIO_ERROR,
                         " Set_parameter: Actual buffer count = %d less than Min Buff count",
@@ -3242,6 +3255,16 @@ OMX_ERRORTYPE omx_vdec::set_parameter(OMX_IN OMX_HANDLETYPE hComp,
           }
         break;
       }
+   case OMX_QcomIndexParamVideoSyncFrameDecodingMode:
+      {
+         /* client sets vdec into thumbnail mode */
+         QOMX_ENABLETYPE *enableType = (QOMX_ENABLETYPE *)paramData;
+         if(enableType && TRUE == enableType->bEnable) {
+               QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
+                  "Decoder set to Thumbnail Mode");
+               m_vdec_cfg.postProc = FLAG_THUMBNAIL_MODE;
+            }
+      }
 
    default:
       {
@@ -3506,14 +3529,16 @@ OMX_ERRORTYPE omx_vdec::get_extension_index(OMX_IN OMX_HANDLETYPE hComp,
                    OMX_IN OMX_STRING paramName,
                    OMX_OUT OMX_INDEXTYPE * indexType)
 {
-   QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
-           "get_extension_index: Error, Not implemented\n");
    if (m_state == OMX_StateInvalid) {
       QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
               "Get Extension Index in Invalid State\n");
       return OMX_ErrorInvalidState;
    }
-   return OMX_ErrorNotImplemented;
+   else if (!strncmp(paramName, "OMX.QCOM.index.param.video.SyncFrameDecodingMode",sizeof("OMX.QCOM.index.param.video.SyncFrameDecodingMode") - 1))
+   {
+      *indexType = (OMX_INDEXTYPE)OMX_QcomIndexParamVideoSyncFrameDecodingMode;
+   }
+   return OMX_ErrorNone;
 }
 
 /* ======================================================================
@@ -4167,7 +4192,7 @@ OMX_ERRORTYPE omx_vdec::allocate_input_buffer(OMX_IN OMX_HANDLETYPE hComp,
                    OMX_CORE_INPUT_PORT_INDEX;
                QTV_MSG_PRIO2(QTVDIAG_GENERAL,
                         QTVDIAG_PRIO_MED,
-                        "Input Buffer %p bufHdr[%p]\n",
+                        "Input Buffer %x bufHdr[%p]\n",
                         bufHdr->pBuffer, bufHdr);
                if (!m_bArbitraryBytes
                    && bufHdr->pBuffer == NULL) {
@@ -4309,6 +4334,8 @@ OMX_ERRORTYPE omx_vdec::allocate_input_buffer(OMX_IN OMX_HANDLETYPE hComp,
                  i++) {
                if (m_extra_buf_info[i].extra_pBuffer ==
                    NULL) {
+                   QTV_MSG_PRIO(QTVDIAG_GENERAL,QTVDIAG_PRIO_MED,
+                          "allocating extra buffers\n");
                   //m_extra_buf_info[i].extra_pBuffer = (OMX_U8*) malloc(m_inp_buf_size);
                   if (VDEC_EFAILED ==
                       vdec_allocate_input_buffer
@@ -6531,15 +6558,6 @@ OMX_ERRORTYPE omx_vdec::fill_this_buffer_proxy(OMX_IN OMX_HANDLETYPE hComp,
       }
    }
    if (nPortIndex < m_out_buf_count) {
-      if (m_state == OMX_StateExecuting) {
-         QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
-                 "FTB:: push_pending_buffer_proxy\n");
-         push_cnt = push_pending_buffers_proxy();
-      }
-      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
-               "FTB Pushed %d input frames at the same time\n",
-               push_cnt);
-
       if (BITMASK_PRESENT((m_out_flags), nPortIndex)) {
          QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
                   "FTB[%d] Ignored \n", nPortIndex);
@@ -6589,6 +6607,17 @@ OMX_ERRORTYPE omx_vdec::fill_this_buffer_proxy(OMX_IN OMX_HANDLETYPE hComp,
          vdec_release_frame(m_vdec,
                   (vdec_frame *) buffer->
                   pOutputPortPrivate);
+
+        if (m_state == OMX_StateExecuting)
+        {
+           QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+                   "FTB:: push_pending_buffer_proxy\n");
+           push_cnt = push_pending_buffers_proxy();
+        }
+        QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
+              "FTB Pushed %d input frames at the same time\n",
+              push_cnt);
+
       }
    } else {
       QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_ERROR,
@@ -7842,7 +7871,6 @@ OMX_ERRORTYPE omx_vdec::
    m_vdec_cfg.width = m_port_width;
    m_vdec_cfg.size_of_nal_length_field = m_nalu_bytes;
    m_vdec_cfg.vc1Rowbase = 0;
-   m_vdec_cfg.postProc = 0;
    m_vdec_cfg.color_format = m_color_format;
 
    QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED, "m_vdec_cfg.kind %s\n",
@@ -8888,6 +8916,27 @@ OMX_ERRORTYPE omx_vdec::
          *isPartialFrame = true;
          source->nFilledLen -= readSize;
          source->nOffset += readSize;
+         if(FLAG_THUMBNAIL_MODE == m_vdec_cfg.postProc)
+         {
+            unsigned int nPortIndex =
+                source -
+                (OMX_BUFFERHEADERTYPE *)
+                m_arbitrary_bytes_input_mem_ptr;
+            if (nPortIndex < MAX_NUM_INPUT_BUFFERS) {
+            QTV_MSG_PRIO1(QTVDIAG_GENERAL,
+                     QTVDIAG_PRIO_HIGH,
+                     "get_one_frame - EmptyBufferDone %p\n",
+                     source);
+               m_cb.EmptyBufferDone(&m_cmp, m_app_data,
+                          source);
+            } else {
+               QTV_MSG_PRIO1(QTVDIAG_GENERAL,
+                        QTVDIAG_PRIO_ERROR,
+                        "ERROR!! Incorrect arbitrary bytes buffer %p\n",
+                        source);
+            }
+            m_extra_buf_info[index].arbitrarybytesInput = NULL;
+         }
       }
       m_current_arbitrary_bytes_input = NULL;
 
@@ -9677,12 +9726,7 @@ void omx_vdec::fill_extradata(OMX_INOUT OMX_BUFFERHEADERTYPE * pBufHdr,
 
    // read to the end of existing extra data sections
    pExtraData = (OMX_OTHER_EXTRADATATYPE *) addr;
-   if (m_vdec_cfg.postProc) {
-      while (addr < end && pExtraData->eType != OMX_ExtraDataNone) {
-         addr += pExtraData->nSize;
-         pExtraData = (OMX_OTHER_EXTRADATATYPE *) addr;
-      }
-   }
+
    // append the common frame info extra data
    size =
        (OMX_EXTRADATA_HEADER_SIZE + sizeof(OMX_QCOM_EXTRADATA_FRAMEINFO) +

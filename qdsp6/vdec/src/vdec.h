@@ -60,7 +60,12 @@ extern "C" {
 #define FRAME_FATAL_ERROR          0x00000010
 
 // Post processing flags for for the ConfigParametersType */
-#define POST_PROC_QUANTIZATION     0x1
+typedef enum PostProc_Flags{
+     POST_PROC_QUANTIZATION = 0x1,
+     POST_PROC_DEBLOCKING = 0x2,
+     POST_PROC_METADATAPROPAGATION = 0x4,
+     FLAG_THUMBNAIL_MODE = 0x8
+   } PostProc_Flags;
 
    typedef enum Vdec_ReturnType {
       VDEC_SUCCESS = 0,   /* no error */
@@ -347,7 +352,7 @@ extern "C" {
   *     -1 failure
   */
    Vdec_ReturnType vdec_get_input_buf_requirements(struct VDecoder_buf_info
-                     *buf_req);
+                     *buf_req, int mode);
 
 /**
   * This method is to be used to get the input buffer
