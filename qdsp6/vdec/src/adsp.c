@@ -537,3 +537,14 @@ int adsp_flush(struct adsp_module *mod, unsigned int port)
            "adsp_flush() Before Flush \n");
    return ioctl(mod->fd, VDEC_IOCTL_FLUSH, &port);
 }
+int adsp_performance_change_request(struct adsp_module *mod, unsigned int request_type)
+{
+   if (NULL == mod) {
+      QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW,
+               "adsp_performance_change_request() mod NULL: 0x%x\n", mod);
+      return -1;
+   }
+   QTV_MSG_PRIO(QTVDIAG_GENERAL, QTVDIAG_PRIO_LOW,
+           "adsp_performance_change_request()\n");
+   return ioctl(mod->fd, VDEC_IOCTL_PERFORMANCE_CHANGE_REQ, &request_type);
+}

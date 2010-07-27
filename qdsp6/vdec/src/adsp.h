@@ -143,6 +143,7 @@ extern "C" {
                struct adsp_buffer_info bufinfo);
    int adsp_get_dec_attr(struct adsp_module *mod,
                struct adsp_dec_attr *attr);
+   int adsp_performance_change_request(struct adsp_module *mod, unsigned int);
 
 #ifdef __cplusplus
 }

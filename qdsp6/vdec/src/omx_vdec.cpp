@@ -8180,6 +8180,9 @@ OMX_ERRORTYPE omx_vdec::
       }
       return OMX_ErrorHardware;
    }
+   if(m_bInterlaced) {
+     vdec_performance_change_request(m_vdec, VDEC_PERF_SET_MAX);
+   }
 
    if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.avc", 26) == 0) {
       if (m_h264_utils != NULL) {

@@ -133,6 +133,13 @@ typedef enum PostProc_Flags{
       VDEC_PICTURE_RES_2x2
    } Vdec_PictureRes;
 
+   typedef enum Vdec_PerformanceRequestType {
+     VDEC_PERF_SET_MIN = 0,
+     VDEC_PERF_LOWER,
+     VDEC_PERF_RAISE,
+     VDEC_PERF_SET_MAX
+   }Vdec_PerformanceRequestType;
+
 /**
  * This defines the structure of the pan scan parameters used in
  * Advanced Profile Frame display
@@ -493,6 +500,8 @@ typedef enum PostProc_Flags{
  */
 int getExtraDataSize(void);
 
+   Vdec_ReturnType vdec_performance_change_request(struct VDecoder *dec,
+              unsigned int);
 
 #ifdef USE_PMEM_ADSP_CACHED
 /**
