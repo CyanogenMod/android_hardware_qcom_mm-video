@@ -481,6 +481,24 @@ namespace venctest
             (OMX_PTR) &framerate);
       }
     }
+    //////////////////////////////////////////
+    //slice bit mode
+    //////////////////////////////////////////
+    if (result == OMX_ErrorNone)
+    {
+      OMX_VIDEO_CONFIG_NALSIZE nal; // OMX_IndexConfigVideoNalSize
+      nal.nPortIndex = (OMX_U32) PORT_INDEX_OUT; // output
+      result = OMX_GetConfig(m_hEncoder,
+          OMX_IndexConfigVideoNalSize,
+          (OMX_PTR) &nal);
+      if (result == OMX_ErrorNone && (pConfig->eResyncMarkerType == RESYNC_MARKER_BITS))
+      {
+        nal.nNaluBytes = pConfig->nResyncMarkerSpacing;
+        result = OMX_SetConfig(m_hEncoder,
+            OMX_IndexConfigVideoNalSize,
+            (OMX_PTR) &nal);
+       }
+     }
 
     //////////////////////////////////////////
     // rotation
