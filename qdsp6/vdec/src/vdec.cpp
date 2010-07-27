@@ -146,7 +146,7 @@ void vdec_frame_cb_handler(void *vdec_context,
             return;
          } else {
             ++nGoodFrameCnt;
-            dec->ctxt->outputBuffer[index].flags = 0;
+            dec->ctxt->outputBuffer[index].flags = pFrame -> flags;
             QTV_MSG_PRIO1(QTVDIAG_GENERAL, QTVDIAG_PRIO_HIGH,
                      "vdec: callback status good frame, cnt: %d\n",
                      nGoodFrameCnt);
@@ -1042,6 +1042,14 @@ Vdec_ReturnType vdec_post_input_buffer(struct VDecoder * dec,
 
    QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
             "cookie %d\tbuf_index %d\n", (int)cookie, buf_index);
+
+   input.flags = 0;
+   if((frame->timestamp & SEI_TRIGGER_BIT_VDEC))
+   {
+      /* client want the sei calculation so trigger dsp to do sei math*/
+      input.flags |= SEI_TRIGGER_BIT_QDSP;
+   }
+
    dec->ctxt->inputBuffer[buf_index].omx_cookie = cookie;
    input.pmem_id = dec->ctxt->inputBuffer[buf_index].pmem_id;
    input.timestamp_lo = (int32) (frame->timestamp & 0x00000000FFFFFFFFLL);
@@ -1049,7 +1057,7 @@ Vdec_ReturnType vdec_post_input_buffer(struct VDecoder * dec,
        (int32) ((frame->timestamp & 0xFFFFFFFF00000000LL) >> 32);
    input.size = (uint32) copy_size;
    input.data = (uint32) (dec->ctxt->inputBuffer[buf_index].omx_cookie);
-   input.flags = frame->flags;
+
    //RAJESH: TBD below
    QTV_MSG_PRIO2(QTVDIAG_GENERAL, QTVDIAG_PRIO_MED,
             "vdec: input->size %d, input->offset %x\n", input.size,

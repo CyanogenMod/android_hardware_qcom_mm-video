@@ -9779,8 +9779,31 @@ void omx_vdec::fill_extradata(OMX_INOUT OMX_BUFFERHEADERTYPE * pBufHdr,
    if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.avc", 26) == 0) {
       pExtraData->eType = (OMX_EXTRADATATYPE) OMX_ExtraDataH264;   /* Extra Data type */
       pExtraData->nDataSize = sizeof(OMX_QCOM_H264EXTRADATA);   /* Size of the supporting data to follow */
-      pExtraCodecData->h264ExtraData.seiTimeStamp =
-          frameDetails->calculatedTimeStamp;
+
+      /* (frame->timestamp & SEI_TRIGGER_BIT_VDEC) -> tells if we asked for sei math
+       * frame->flags & SEI_TRIGGER_BIT_QDSP) -> dsp is succesfull,if this is zero
+       */
+
+      if(!(frame->timestamp & SEI_TRIGGER_BIT_VDEC) &&
+         !(frame->flags & SEI_TRIGGER_BIT_QDSP))
+      {
+         /* default sei time stamp value */
+         pExtraCodecData->h264ExtraData.seiTimeStamp |=  SEI_TRIGGER_BIT_VDEC;
+      }
+      else if((frame->timestamp & SEI_TRIGGER_BIT_VDEC) &&
+         !(frame->flags & SEI_TRIGGER_BIT_QDSP))
+      {
+         /* DSP successfully calculated the time stamp*/
+         pExtraCodecData->h264ExtraData.seiTimeStamp =
+             frameDetails->calculatedTimeStamp;
+      }
+      else if((frame->timestamp & SEI_TRIGGER_BIT_VDEC) &&
+         (frame->flags & SEI_TRIGGER_BIT_QDSP))
+      {
+         /* sei math failure */
+         pExtraCodecData->h264ExtraData.seiTimeStamp |=  SEI_TRIGGER_BIT_VDEC;
+      }
+
    } else if (strncmp(m_vdec_cfg.kind, "OMX.qcom.video.decoder.vc1", 26) ==
          0) {
       pExtraData->eType = (OMX_EXTRADATATYPE) OMX_ExtraDataVC1;   /* Extra Data type */

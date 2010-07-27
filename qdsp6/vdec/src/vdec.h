@@ -43,6 +43,9 @@ extern "C" {
 #include "qtypes.h"
 #include "pmem.h"
 
+#define SEI_TRIGGER_BIT_VDEC (signed long long)0x100000000
+#define SEI_TRIGGER_BIT_QDSP 0x80000000
+
 /**
  * The following are fourcc hex representations of the video
  * codecs currently supported by the vdec core
