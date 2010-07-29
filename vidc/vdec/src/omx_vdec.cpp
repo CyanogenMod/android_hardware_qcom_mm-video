@@ -1049,7 +1049,7 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING role)
     ioctl_msg.inputparam = &driver_context.input_buffer;
     ioctl_msg.outputparam = NULL;
 
-    m_inp_buf_count_min = m_inp_buf_count = driver_context.input_buffer.actualcount =
+    m_inp_buf_count = driver_context.input_buffer.actualcount =
      driver_context.input_buffer.mincount + 3;
 
     if ( (eRet == OMX_ErrorNone) &&
@@ -1191,6 +1191,10 @@ OMX_ERRORTYPE  omx_vdec::get_component_version
         return OMX_ErrorInvalidState;
     }
   /* TBD -- Return the proper version */
+  if (specVersion)
+  {
+    specVersion->nVersion = OMX_SPEC_VERSION;
+  }
   return OMX_ErrorNone;
 }
 /* ======================================================================
@@ -1218,6 +1222,13 @@ OMX_ERRORTYPE  omx_vdec::send_command(OMX_IN OMX_HANDLETYPE hComp,
     {
         DEBUG_PRINT_ERROR("ERROR: Send Command in Invalid State\n");
         return OMX_ErrorInvalidState;
+    }
+    if (cmd == OMX_CommandFlush && param1 != OMX_CORE_INPUT_PORT_INDEX
+      && param1 != OMX_CORE_OUTPUT_PORT_INDEX && param1 != OMX_ALL)
+    {
+      DEBUG_PRINT_ERROR("\n send_command(): ERROR OMX_CommandFlush "
+        "to invalid port: %d", param1);
+      return OMX_ErrorBadPortIndex;
     }
     post_event((unsigned)cmd,(unsigned)param1,OMX_COMPONENT_GENERATE_COMMAND);
     sem_wait(&m_cmd_lock);
@@ -1391,7 +1402,7 @@ OMX_ERRORTYPE  omx_vdec::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
          else
          {
            BITMASK_SET(&m_flags,OMX_COMPONENT_PAUSE_PENDING);
-           DEBUG_PRINT_LOW("send_command_proxy(): Idle-->Pause\n");
+           DEBUG_PRINT_LOW("send_command_proxy(): Idle-->Executing\n");
            bFlag = 0;
          }
       }
@@ -1446,7 +1457,7 @@ OMX_ERRORTYPE  omx_vdec::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
          else
          {
            BITMASK_SET(&m_flags,OMX_COMPONENT_PAUSE_PENDING);
-           DEBUG_PRINT_LOW("send_command_proxy(): Pause-->Executing\n");
+           DEBUG_PRINT_LOW("send_command_proxy(): Executing-->Pause\n");
            bFlag = 0;
          }
        }
@@ -1722,9 +1733,9 @@ OMX_ERRORTYPE  omx_vdec::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
                {
                  sem_posted = 1;
                  sem_post (&m_cmd_lock);
+               }
                 execute_omx_flush(OMX_CORE_INPUT_PORT_INDEX);
                }
-             }
 
              // Skip the event notification
              bFlag = 0;
@@ -1749,8 +1760,8 @@ OMX_ERRORTYPE  omx_vdec::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
               {
                 sem_posted = 1;
                 sem_post (&m_cmd_lock);
-                execute_omx_flush(OMX_CORE_OUTPUT_PORT_INDEX);
               }
+                execute_omx_flush(OMX_CORE_OUTPUT_PORT_INDEX);
             }
             // Skip the event notification
             bFlag = 0;
@@ -1925,10 +1936,14 @@ bool omx_vdec::execute_input_flush(OMX_U32 flushType)
     else if(ident == OMX_COMPONENT_GENERATE_ETB)
     {
       pending_input_buffers++;
+      DEBUG_PRINT_LOW("\n Flush Input OMX_COMPONENT_GENERATE_ETB %p, pending_input_buffers %d",
+        (OMX_BUFFERHEADERTYPE *)p2, pending_input_buffers);
       empty_buffer_done(&m_cmp,(OMX_BUFFERHEADERTYPE *)p2);
     }
     else if (ident == OMX_COMPONENT_GENERATE_EBD)
     {
+      DEBUG_PRINT_LOW("\n Flush Input OMX_COMPONENT_GENERATE_EBD %p",
+        (OMX_BUFFERHEADERTYPE *)p1);
       empty_buffer_done(&m_cmp,(OMX_BUFFERHEADERTYPE *)p1);
     }
   }
@@ -4608,6 +4623,18 @@ OMX_ERRORTYPE  omx_vdec::empty_this_buffer(OMX_IN OMX_HANDLETYPE         hComp,
     return OMX_ErrorBadParameter;
   }
 
+  if (!m_inp_bEnabled)
+  {
+    DEBUG_PRINT_ERROR("\nERROR:ETB incorrect state operation, input port is disabled.");
+    return OMX_ErrorIncorrectStateOperation;
+  }
+
+  if (buffer->nInputPortIndex != OMX_CORE_INPUT_PORT_INDEX)
+  {
+    DEBUG_PRINT_ERROR("\nERROR:ETB invalid port in header %d", buffer->nInputPortIndex);
+    return OMX_ErrorBadPortIndex;
+  }
+
   if (arbitrary_bytes)
   {
     nBufferIndex = buffer - m_inp_heap_ptr;
@@ -4793,6 +4820,13 @@ OMX_ERRORTYPE  omx_vdec::empty_this_buffer_proxy(OMX_IN OMX_HANDLETYPE         h
             &ioctl_msg) < 0)
   {
     /*Generate an async error and move to invalid state*/
+    DEBUG_PRINT_ERROR("\nERROR:empty_this_buffer_proxy VDEC_IOCTL_DECODE_FRAME failed");
+    if (!arbitrary_bytes)
+    {
+      DEBUG_PRINT_LOW("\n Return failed buffer");
+      post_event ((unsigned int)buffer,VDEC_S_SUCCESS,
+                       OMX_COMPONENT_GENERATE_EBD);
+    }
     return OMX_ErrorBadParameter;
   }
 
@@ -4824,9 +4858,21 @@ OMX_ERRORTYPE  omx_vdec::fill_this_buffer(OMX_IN OMX_HANDLETYPE  hComp,
       return OMX_ErrorInvalidState;
   }
 
+  if (!m_out_bEnabled)
+  {
+    DEBUG_PRINT_ERROR("\nERROR:FTB incorrect state operation, output port is disabled.");
+    return OMX_ErrorIncorrectStateOperation;
+  }
+
   if (buffer == NULL || ((buffer - m_out_mem_ptr) > m_out_buf_size))
   {
     return OMX_ErrorBadParameter;
+  }
+
+  if (buffer->nOutputPortIndex != OMX_CORE_OUTPUT_PORT_INDEX)
+  {
+    DEBUG_PRINT_ERROR("\nERROR:FTB invalid port in header %d", buffer->nOutputPortIndex);
+    return OMX_ErrorBadPortIndex;
   }
 
   DEBUG_PRINT_LOW("\n FTB: bufhdr = %p, bufhdr->pBuffer = %p", buffer, buffer->pBuffer);
@@ -4899,6 +4945,7 @@ OMX_ERRORTYPE  omx_vdec::fill_this_buffer_proxy(
   {
     DEBUG_PRINT_ERROR("\n Decoder frame failed");
     m_cb.FillBufferDone (hComp,m_app_data,buffer);
+    pending_output_buffers--;
     return OMX_ErrorBadParameter;
   }
 
@@ -5564,6 +5611,7 @@ OMX_ERRORTYPE omx_vdec::empty_buffer_done(OMX_HANDLETYPE         hComp,
 
     if (buffer == NULL || ((buffer - m_inp_mem_ptr) > m_inp_buf_count))
     {
+        DEBUG_PRINT_ERROR("\n empty_buffer_done: ERROR bufhdr = %p", buffer);
        return OMX_ErrorBadParameter;
     }
 
