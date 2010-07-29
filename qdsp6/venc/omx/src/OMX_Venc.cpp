@@ -3485,7 +3485,7 @@ OMX_ERRORTYPE Venc::allocate_buffer(OMX_IN OMX_HANDLETYPE hComponent,
       {
 
         result = pmem_alloc(&pPrivateData->sPmemInfo,
-            m_sOutPortDef.nBufferSize, VENC_PMEM_SMI);
+            m_sOutPortDef.nBufferSize, VENC_PMEM_EBI1);
         if (result != OMX_ErrorNone) {
           QC_OMX_MSG_ERROR("Failed to allocate pmem buffer");
         }
@@ -3561,7 +3561,7 @@ OMX_ERRORTYPE Venc::allocate_buffer(OMX_IN OMX_HANDLETYPE hComponent,
       {
 
         result = pmem_alloc(&pPrivateData->sPmemInfo,
-            m_sInPortDef.nBufferSize, VENC_PMEM_SMI);
+            m_sInPortDef.nBufferSize, VENC_PMEM_EBI1);
         if (result != OMX_ErrorNone) {
           QC_OMX_MSG_ERROR("Failed to allocate pmem buffer");
         }
@@ -3794,7 +3794,7 @@ OMX_ERRORTYPE Venc::allocate_q6_buffers(struct venc_buffers *pbufs)
 
   if (result == OMX_ErrorNone)
   {
-    result = pmem_alloc(&(pbufs->vlc_buf), nCmdSize, VENC_PMEM_EBI1);
+    result = pmem_alloc(&(pbufs->vlc_buf), nVlcSize, VENC_PMEM_EBI1);
     if (result == OMX_ErrorNone)
     {
       QC_OMX_MSG_HIGH("allocated vlc buffer: pVirt=0x%x, nPhy=0x%x,\n",
@@ -4429,7 +4429,7 @@ void Venc::process_empty_buffer(OMX_BUFFERHEADERTYPE* pBufferHdr)
    pParam = reinterpret_cast<OMX_QCOM_PLATFORM_PRIVATE_PMEM_INFO *>(pBufferHdr->pPlatformPrivate);
    pmem_input.fd = pParam->pmem_fd;
    pmem_input.offset = pParam->offset;
-   pmem_input.src = VENC_PMEM_SMI;
+   pmem_input.src = VENC_PMEM_EBI1;
    pmem_input.size =  m_sInPortDef.nBufferSize;
    input.ptr_buffer = (unsigned char *)&pmem_input;
 
@@ -4499,7 +4499,7 @@ void Venc::process_fill_buffer(OMX_BUFFERHEADERTYPE* pBufferHdr)
       pmem_output.offset = pParam->offset;
       /*We should enhance OMX_QCOM_PLATFORM_PRIVATE_PMEM_INFO to store
        * pmem source info. Hardcoding for now.*/
-      pmem_output.src = VENC_PMEM_SMI;
+      pmem_output.src = VENC_PMEM_EBI1;
       pmem_output.size =  m_sOutPortDef.nBufferSize;
       output.ptr_buffer = (unsigned char *)&pmem_output;
 
