@@ -399,6 +399,7 @@ void omx_video::process_event_cb(void *ctxt, unsigned char id)
             break;
 
           default:
+            DEBUG_PRINT_LOW("\n process_event_cb forwarding EventCmdComplete %d \n", p1);
             pThis->m_pCallbacks.EventHandler(&pThis->m_cmp, pThis->m_app_data,
                                              OMX_EventCmdComplete, p1, p2, NULL );
             break;
@@ -504,7 +505,7 @@ void omx_video::process_event_cb(void *ctxt, unsigned char id)
           }
           else if(BITMASK_PRESENT(&pThis->m_flags ,OMX_COMPONENT_IDLE_PENDING))
           {
-            printf("\n dev_stop called after Output flush complete\n");
+            DEBUG_PRINT_LOW("\n dev_stop called after Output flush complete\n");
             if(!pThis->input_flush_progress)
             {
               if(dev_stop() != 0)
@@ -557,6 +558,8 @@ void omx_video::process_event_cb(void *ctxt, unsigned char id)
           if(BITMASK_PRESENT(&pThis->m_flags,OMX_COMPONENT_PAUSE_PENDING))
           {
             //Send the callback now
+            pThis->complete_pending_buffer_done_cbs();
+            DEBUG_PRINT_LOW("omx_video::process_event_cb() Sending PAUSE complete after all pending EBD/FBD\n");
             BITMASK_CLEAR((&pThis->m_flags),OMX_COMPONENT_PAUSE_PENDING);
             pThis->m_state = OMX_StatePause;
             pThis->m_pCallbacks.EventHandler(&pThis->m_cmp, pThis->m_app_data,
@@ -607,6 +610,7 @@ void omx_video::process_event_cb(void *ctxt, unsigned char id)
         break;
 
       default:
+        DEBUG_PRINT_LOW("\n process_event_cb unknown msg id 0x%02x", id);
         break;
       }
     }
@@ -3550,4 +3554,75 @@ OMX_ERRORTYPE omx_video::empty_buffer_done(OMX_HANDLETYPE         hComp,
     m_pCallbacks.EmptyBufferDone(hComp ,m_app_data, buffer);
   }
   return OMX_ErrorNone;
+}
+
+void omx_video::complete_pending_buffer_done_cbs()
+{
+  unsigned p1;
+  unsigned p2;
+  unsigned ident;
+  omx_cmd_queue tmp_q, pending_bd_q;
+  pthread_mutex_lock(&m_lock);
+  // pop all pending GENERATE FDB from ftb queue
+  while (m_ftb_q.m_size)
+  {
+    m_ftb_q.pop_entry(&p1,&p2,&ident);
+    if(ident == OMX_COMPONENT_GENERATE_FBD)
+    {
+      pending_bd_q.insert_entry(p1,p2,ident);
+    }
+    else
+    {
+      tmp_q.insert_entry(p1,p2,ident);
+    }
+  }
+  //return all non GENERATE FDB to ftb queue
+  while(tmp_q.m_size)
+  {
+    tmp_q.pop_entry(&p1,&p2,&ident);
+    m_ftb_q.insert_entry(p1,p2,ident);
+  }
+  // pop all pending GENERATE EDB from etb queue
+  while (m_etb_q.m_size)
+  {
+    m_etb_q.pop_entry(&p1,&p2,&ident);
+    if(ident == OMX_COMPONENT_GENERATE_EBD)
+    {
+      pending_bd_q.insert_entry(p1,p2,ident);
+    }
+    else
+    {
+      tmp_q.insert_entry(p1,p2,ident);
+    }
+  }
+  //return all non GENERATE FDB to etb queue
+  while(tmp_q.m_size)
+  {
+    tmp_q.pop_entry(&p1,&p2,&ident);
+    m_etb_q.insert_entry(p1,p2,ident);
+  }
+  pthread_mutex_unlock(&m_lock);
+  // process all pending buffer dones
+  while(pending_bd_q.m_size)
+  {
+    pending_bd_q.pop_entry(&p1,&p2,&ident);
+    switch(ident)
+    {
+      case OMX_COMPONENT_GENERATE_EBD:
+        if(empty_buffer_done(&m_cmp, (OMX_BUFFERHEADERTYPE *)p1) != OMX_ErrorNone)
+        {
+          DEBUG_PRINT_ERROR("\nERROR: empty_buffer_done() failed!\n");
+          omx_report_error ();
+        }
+        break;
+
+      case OMX_COMPONENT_GENERATE_FBD:
+        if(fill_buffer_done(&m_cmp, (OMX_BUFFERHEADERTYPE *)p1) != OMX_ErrorNone )
+        {
+          DEBUG_PRINT_ERROR("\nERROR: fill_buffer_done() failed!\n");
+          omx_report_error ();
+        }
+        break;
+    }
+  }
 }
