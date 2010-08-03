@@ -877,7 +877,10 @@ bool MP4_Utils::parseHeader(mp4StreamType * psBits) {
             || quant_precision  > MAX_QUANTPRECISION )
       {
          QTV_MSG(QTVDIAG_VIDEO_TASK,"returning INVALID_QUANT_PRECISION ");
-         return false;
+/* though per standard we can fail playback here, we choose not to
+ * we will simply leave a msg
+ */
+//         return false;
       }
 
       /* bits_per_pixel*/
@@ -885,7 +888,10 @@ bool MP4_Utils::parseHeader(mp4StreamType * psBits) {
       if ( BitsPerPixel < 4 || BitsPerPixel > 12 )
       {
       QTV_MSG(QTVDIAG_VIDEO_TASK,"returning INVALID_BITS_PER_PIXEL ");
-      return false;
+/* though per standard we can fail playback here, we choose not to
+ * we will simply leave a msg
+ */
+//      return false;
       }
    }
 
