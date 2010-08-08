@@ -29,6 +29,12 @@
 OMX_VIDEO_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
+# Decoder is producing H264 artifacts, disabled until debugged
+ifeq "$(findstring qsd8k,$(TARGET_BOARD_PLATFORM))" "qsd8k"
+#    include $(OMX_VIDEO_PATH)/qdsp6/vdec/Android.mk
+    include $(OMX_VIDEO_PATH)/qdsp6/venc/Android.mk
+endif
+
 ifeq "$(findstring qsd8250,$(TARGET_PRODUCT))" "qsd8250"
     include $(OMX_VIDEO_PATH)/qdsp6/vdec/Android.mk
     include $(OMX_VIDEO_PATH)/qdsp6/venc/Android.mk
