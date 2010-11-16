@@ -76,6 +76,8 @@ extern "C" {
 #include "queue.h"
 }
 
+#define CONFIG_MSM_MDP40
+
 #include <inttypes.h>
 #include <linux/msm_mdp.h>
 #include <linux/fb.h>
@@ -107,8 +109,6 @@ extern "C" {
 #define SWAPBYTES(ptrA, ptrB) { char t = *ptrA; *ptrA = *ptrB; *ptrB = t;}
 #define SIZE_NAL_FIELD_MAX  4
 #define MDP_DEINTERLACE 0x80000000
-
-#define ALLOCATE_BUFFER 0
 
 /************************************************************************/
 /*              GLOBAL DECLARATIONS                     */
@@ -280,11 +280,6 @@ static OMX_ERRORTYPE Allocate_Buffer ( OMX_COMPONENTTYPE *dec_handle,
                                        OMX_U32 nPortIndex,
                                        long bufCntMin, long bufSize);
 
-static OMX_ERRORTYPE use_buffer(OMX_COMPONENTTYPE      *dec_handle,
-                                OMX_BUFFERHEADERTYPE ***bufferHdr,
-                                OMX_U32              nPortIndex,
-                                OMX_U32              bufSize,
-                                long                 bufcnt);
 
 static OMX_ERRORTYPE EventHandler(OMX_IN OMX_HANDLETYPE hComponent,
                                   OMX_IN OMX_PTR pAppData,
@@ -1638,37 +1633,19 @@ int Play_Decoder()
 
     input_buf_cnt = portFmt.nBufferCountActual;
     DEBUG_PRINT("Transition to Idle State succesful...\n");
+    /* Allocate buffer on decoder's i/p port */
+    error = Allocate_Buffer(dec_handle, &pInputBufHdrs, portFmt.nPortIndex,
+                            portFmt.nBufferCountActual, portFmt.nBufferSize);
+    if (error != OMX_ErrorNone) {
+        DEBUG_PRINT_ERROR("Error - OMX_AllocateBuffer Input buffer error\n");
+        return -1;
+    }
+    else {
+        DEBUG_PRINT("\nOMX_AllocateBuffer Input buffer success\n");
+    }
 
-#if ALLOCATE_BUFFER
-       // Allocate buffer on decoder's i/p port
-       error = Allocate_Buffer(dec_handle, &pInputBufHdrs, portFmt.nPortIndex,
-                               portFmt.nBufferCountActual, portFmt.nBufferSize);
-       if (error != OMX_ErrorNone) {
-           DEBUG_PRINT_ERROR("Error - OMX_AllocateBuffer Input buffer error\n");
-           return -1;
-       }
-       else {
-           DEBUG_PRINT("\nOMX_AllocateBuffer Input buffer success\n");
-       }
-#else
-       // Use buffer on decoder's i/p port
-
-          DEBUG_PRINT_ERROR("\n before OMX_UseBuffer %p", &pInputBufHdrs);
-          error =  use_buffer(dec_handle,
-                             &pInputBufHdrs,
-                              portFmt.nPortIndex,
-                              portFmt.nBufferSize,
-                              portFmt.nBufferCountActual);
-          if (error != OMX_ErrorNone) {
-             DEBUG_PRINT_ERROR("ERROR - OMX_UseBuffer Input buffer failed");
-             return -1;
-          }
-          else {
-             DEBUG_PRINT("OMX_UseBuffer Input buffer success\n");
-          }
-#endif
-       portFmt.nPortIndex = portParam.nStartPortNumber+1;
-       // Port for which the Client needs to obtain info
+    portFmt.nPortIndex = portParam.nStartPortNumber+1;
+    /* Port for which the Client needs to obtain info */
 
     OMX_GetParameter(dec_handle,OMX_IndexParamPortDefinition,&portFmt);
     DEBUG_PRINT("nMin Buffer Count=%d", portFmt.nBufferCountMin);
@@ -2014,58 +1991,13 @@ static OMX_ERRORTYPE Allocate_Buffer ( OMX_COMPONENTTYPE *dec_handle,
     return error;
 }
 
-static OMX_ERRORTYPE use_buffer ( OMX_COMPONENTTYPE *dec_handle,
-                                  OMX_BUFFERHEADERTYPE  ***pBufHdrs,
-                                  OMX_U32 nPortIndex,
-                                  OMX_U32 bufSize,
-                                  long bufCntMin)
-{
-    DEBUG_PRINT("Inside %s \n", __FUNCTION__);
-    OMX_ERRORTYPE error=OMX_ErrorNone;
-    long bufCnt=0;
-    OMX_U8* pvirt = NULL;
-
-    *pBufHdrs= (OMX_BUFFERHEADERTYPE **)
-                   malloc(sizeof(OMX_BUFFERHEADERTYPE)* bufCntMin);
-    if(*pBufHdrs == NULL){
-        DEBUG_PRINT_ERROR("\n m_inp_heap_ptr Allocation failed ");
-        return OMX_ErrorInsufficientResources;
-     }
-
-    for(bufCnt=0; bufCnt < bufCntMin; ++bufCnt) {
-        // allocate input buffers
-      DEBUG_PRINT("OMX_UseBuffer No %d %d \n", bufCnt, bufSize);
-      pvirt = (OMX_U8*) malloc (bufSize);
-      if(pvirt == NULL){
-        DEBUG_PRINT_ERROR("\n pvirt Allocation failed ");
-        return OMX_ErrorInsufficientResources;
-     }
-      error = OMX_UseBuffer(dec_handle, &((*pBufHdrs)[bufCnt]),
-                              nPortIndex, NULL, bufSize, pvirt);
-       }
-    return error;
-}
-
 static void do_freeHandle_and_clean_up(bool isDueToError)
 {
     int bufCnt = 0;
 
     for(bufCnt=0; bufCnt < input_buf_cnt; ++bufCnt)
     {
-       if (pInputBufHdrs[bufCnt]->pBuffer)
-       {
-          free(pInputBufHdrs[bufCnt]->pBuffer);
-          pInputBufHdrs[bufCnt]->pBuffer = NULL;
-
-          DEBUG_PRINT_ERROR("\nFree(pInputBufHdrs[%d]->pBuffer)",bufCnt);
-       }
-       OMX_FreeBuffer(dec_handle, 0, pInputBufHdrs[bufCnt]);
-    }
-
-    if (pInputBufHdrs)
-    {
-       free(pInputBufHdrs);
-       pInputBufHdrs = NULL;
+        OMX_FreeBuffer(dec_handle, 0, pInputBufHdrs[bufCnt]);
     }
 
     for(bufCnt=0; bufCnt < portFmt.nBufferCountActual; ++bufCnt)

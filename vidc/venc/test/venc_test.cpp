@@ -266,14 +266,6 @@ static bool m_bWatchDogKicked = false;
 static long long tot_bufsize = 0;
 int ebd_cnt=0, fbd_cnt=0;
 
-#ifdef MAX_RES_720P
-static const char* PMEM_DEVICE = "/dev/pmem_adsp";
-#elif MAX_RES_1080P
-static const char* PMEM_DEVICE = "/dev/pmem_smipool";
-#else
-#error PMEM_DEVICE cannot be determined.
-#endif
-
 //////////////////////////
 // MODULE FUNCTIONS
 //////////////////////////
@@ -285,7 +277,7 @@ void* PmemMalloc(OMX_QCOM_PLATFORM_PRIVATE_PMEM_INFO* pMem, int nSize)
    if (!pMem)
       return NULL;
 
-   pMem->pmem_fd = open(PMEM_DEVICE, O_RDWR);
+   pMem->pmem_fd = open("/dev/pmem_adsp", O_RDWR);
    if ((int)(pMem->pmem_fd) < 0)
       return NULL;
    nSize = (nSize + 4095) & (~4095);
@@ -374,14 +366,6 @@ OMX_ERRORTYPE ConfigureEncoder()
                              &portdef);
    E("\n OMX_IndexParamPortDefinition Set Paramter on input port");
    CHK(result);
-   // once more to get proper buffer size
-   result = OMX_GetParameter(m_hHandle,
-                             OMX_IndexParamPortDefinition,
-                             &portdef);
-   E("\n OMX_IndexParamPortDefinition Get Paramter on input port, 2nd pass");
-   CHK(result);
-   // update size accordingly
-   m_sProfile.nFrameBytes = portdef.nBufferSize;
    portdef.nPortIndex = (OMX_U32) 1; // output
    result = OMX_GetParameter(m_hHandle,
                              OMX_IndexParamPortDefinition,
@@ -480,7 +464,6 @@ result = OMX_SetParameter(m_hHandle,
       D("Configuring MP4/H264...");
 
       OMX_VIDEO_PARAM_PROFILELEVELTYPE profileLevel; // OMX_IndexParamVideoProfileLevelCurrent
-      profileLevel.nPortIndex = (OMX_U32) PORT_INDEX_OUT;
       profileLevel.eProfile = eProfile;
       profileLevel.eLevel =  eLevel;
       result = OMX_SetParameter(m_hHandle,
@@ -549,31 +532,6 @@ result = OMX_SetParameter(m_hHandle,
                                 &avcslicefmo);
       E("\n OMX_IndexParamVideoSliceFMO Set Paramter port");
       CHK(result);
-
-      OMX_VIDEO_PARAM_AVCTYPE avcdata;
-      result = OMX_GetParameter(m_hHandle,
-                                OMX_IndexParamVideoAvc,
-                                &avcdata);
-      E("\n OMX_IndexParamVideoAvc Get Parameter filter");
-      CHK(result);
-      E("\n OMX_IndexParamVideoAvc Ready to Set Parameter filter/CABAC");
-
-      printf("\n TEST profile %d Index %d ",avcdata.eProfile, avcdata.eLevel);
-
-//      avcdata.eLoopFilterMode = OMX_VIDEO_AVCLoopFilterEnable;
-
-      avcdata.eLoopFilterMode = OMX_VIDEO_AVCLoopFilterDisable;
-//      avcdata.eLoopFilterMode = OMX_VIDEO_AVCLoopFilterDisableSliceBoundary;
-
-      avcdata.bEntropyCodingCABAC = OMX_FALSE;
-   //   avcdata.bEntropyCodingCABAC = OMX_TRUE;
-      avcdata.nCabacInitIdc = 0;
-      printf("\n TEST Filter value %u ",avcdata.eLoopFilterMode);
-      result = OMX_SetParameter(m_hHandle,
-                                OMX_IndexParamVideoAvc,
-                                &avcdata);
-      CHK(result);
-      E("\n OMX_IndexParamVideoAvc Set Parameter DBK/CABAC complete");
    }
 
    OMX_VIDEO_PARAM_BITRATETYPE bitrate; // OMX_IndexParamVideoBitrate
@@ -954,41 +912,12 @@ OMX_ERRORTYPE VencTest_ReadAndEmpty(OMX_BUFFERHEADERTYPE* pYUVBuffer)
 {
    OMX_ERRORTYPE result = OMX_ErrorNone;
 #ifdef T_ARM
-#ifdef MAX_RES_720P
    if (read(m_nInFd,
             pYUVBuffer->pBuffer,
             m_sProfile.nFrameBytes) != m_sProfile.nFrameBytes)
    {
       return OMX_ErrorUndefined;
    }
-#else
-         OMX_U32 bytestoread = m_sProfile.nFrameWidth*m_sProfile.nFrameHeight;
-         // read Y first
-         if (read(m_nInFd,
-              pYUVBuffer->pBuffer,
-              bytestoread) != bytestoread)
-            return OMX_ErrorUndefined;
-
-         // check alignment for offset to C
-         OMX_U32 offset_to_c = m_sProfile.nFrameWidth * m_sProfile.nFrameHeight;
-
-         const OMX_U32 C_2K = (1024*2),
-            MASK_2K = C_2K-1,
-            IMASK_2K = ~MASK_2K;
-
-         if (offset_to_c & MASK_2K)
-         {
-            // offset to C is not 2k aligned, adjustment is required
-            offset_to_c = (offset_to_c & IMASK_2K) + C_2K;
-         }
-
-         bytestoread = m_sProfile.nFrameWidth*m_sProfile.nFrameHeight/2;
-         // read C
-         if (read(m_nInFd,
-              pYUVBuffer->pBuffer + offset_to_c,
-              bytestoread)!= bytestoread)
-            return OMX_ErrorUndefined;
-#endif
 #else
    {
 	  char * pInputbuf = (char *)(pYUVBuffer->pBuffer) ;
@@ -1101,34 +1030,6 @@ void usage(char* filename)
    fprintf(stderr, "       RateControl (Values 0 - 4 for RC_OFF, RC_CBR_CFR, RC_CBR_VFR, RC_VBR_CFR, RC_VBR_VFR\n");
    exit(1);
 }
-
-bool parseWxH(char *str, OMX_U32 *width, OMX_U32 *height)
-{
-   bool parseOK = false;
-   const char delimiters[] = " x*,";
-   char *token, *dupstr;
-   OMX_U32 w, h;
-
-   dupstr = strdup(str);
-   token = strtok(dupstr, delimiters);
-   if (token)
-   {
-       w = strtoul(token, NULL, 10);
-       token = strtok(NULL, delimiters);
-       if (token)
-       {
-           h = strtoul(token, NULL, 10);
-           if (w != ULONG_MAX && h != ULONG_MAX)
-           {
-               parseOK = true;
-               *width = w;
-               *height = h;
-           }
-       }
-   }
-   return parseOK;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 void parseArgs(int argc, char** argv)
 {
@@ -1301,30 +1202,19 @@ void parseArgs(int argc, char** argv)
       m_sProfile.eLevel = OMX_VIDEO_MPEG4Level1;
    }
   else if (strcmp("CIF", argv[2]) == 0 ||
-            strcmp("cif", argv[2]) == 0)
+            strcmp("CIF", argv[2]) == 0)
    {
       m_sProfile.nFrameWidth = 352;
       m_sProfile.nFrameHeight = 288;
       m_sProfile.nFrameBytes = 352*288*3/2;
       m_sProfile.eLevel = OMX_VIDEO_MPEG4Level1;
    }
-   else if (strcmp("720", argv[2]) == 0)
+   else if (strcmp("720", argv[2]) == 0 ||
+            strcmp("720", argv[2]) == 0)
    {
       m_sProfile.nFrameWidth = 1280;
       m_sProfile.nFrameHeight = 720;
       m_sProfile.nFrameBytes = 720*1280*3/2;
-      m_sProfile.eLevel = OMX_VIDEO_MPEG4Level1;
-   }
-   else if (strcmp("1080", argv[2]) == 0)
-   {
-      m_sProfile.nFrameWidth = 1920;
-      m_sProfile.nFrameHeight = 1080;
-      m_sProfile.nFrameBytes = 1920*1080*3/2;
-      m_sProfile.eLevel = OMX_VIDEO_MPEG4Level1;
-   }
-   else if (parseWxH(argv[2], &m_sProfile.nFrameWidth, &m_sProfile.nFrameHeight))
-   {
-      m_sProfile.nFrameBytes = m_sProfile.nFrameWidth*m_sProfile.nFrameHeight*3/2;
       m_sProfile.eLevel = OMX_VIDEO_MPEG4Level1;
    }
    else
@@ -1568,34 +1458,9 @@ int main(int argc, char** argv)
       for (i = 0; i < num_in_buffers; i++)
       {
         D("[%d] address 0x%x",i, m_pInBuffers[i]->pBuffer);
-#ifdef MAX_RES_720P
          read(m_nInFd,
               m_pInBuffers[i]->pBuffer,
               m_sProfile.nFrameBytes);
-#else
-         // read Y first
-         read(m_nInFd,
-              m_pInBuffers[i]->pBuffer,
-              m_sProfile.nFrameWidth*m_sProfile.nFrameHeight);
-
-         // check alignment for offset to C
-         OMX_U32 offset_to_c = m_sProfile.nFrameWidth * m_sProfile.nFrameHeight;
-
-         const OMX_U32 C_2K = (1024*2),
-            MASK_2K = C_2K-1,
-            IMASK_2K = ~MASK_2K;
-
-         if (offset_to_c & MASK_2K)
-         {
-            // offset to C is not 2k aligned, adjustment is required
-            offset_to_c = (offset_to_c & IMASK_2K) + C_2K;
-         }
-
-         // read C
-         read(m_nInFd,
-              m_pInBuffers[i]->pBuffer + offset_to_c,
-              m_sProfile.nFrameWidth*m_sProfile.nFrameHeight/2);
-#endif
 
       }
 

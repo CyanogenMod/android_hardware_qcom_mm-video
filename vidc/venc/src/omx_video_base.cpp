@@ -87,14 +87,6 @@ typedef struct OMXComponentCapabilityFlagsType
 extern FILE *outputBufferFile1;
 #endif
 
-#ifdef MAX_RES_720P
-static const char* PMEM_DEVICE = "/dev/pmem_adsp";
-#elif MAX_RES_1080P
-static const char* PMEM_DEVICE = "/dev/pmem_smipool";
-#else
-#error PMEM_DEVICE cannot be determined.
-#endif
-
 void* message_thread(void *input)
 {
   omx_video* omx = reinterpret_cast<omx_video*>(input);
@@ -202,7 +194,7 @@ unsigned omx_video::omx_cmd_queue::get_q_msg_type()
 VideoHeap::VideoHeap(int fd, size_t size, void* base)
 {
   // dup file descriptor, map once, use pmem
-  init(dup(fd), base, size, 0 , PMEM_DEVICE);
+  init(dup(fd), base, size, 0 , "/dev/pmem_adsp");
 }
 #endif // _ANDROID_
 
@@ -399,7 +391,6 @@ void omx_video::process_event_cb(void *ctxt, unsigned char id)
             break;
 
           default:
-            DEBUG_PRINT_LOW("\n process_event_cb forwarding EventCmdComplete %d \n", p1);
             pThis->m_pCallbacks.EventHandler(&pThis->m_cmp, pThis->m_app_data,
                                              OMX_EventCmdComplete, p1, p2, NULL );
             break;
@@ -474,7 +465,7 @@ void omx_video::process_event_cb(void *ctxt, unsigned char id)
           {
             if(!pThis->output_flush_progress)
             {
-              DEBUG_PRINT_LOW("\n dev_stop called after input flush complete\n");
+              printf("\n dev_stop called after input flush complete\n");
               if(dev_stop() != 0)
               {
                 DEBUG_PRINT_ERROR("\nERROR: dev_stop() failed in i/p flush!\n");
@@ -505,7 +496,7 @@ void omx_video::process_event_cb(void *ctxt, unsigned char id)
           }
           else if(BITMASK_PRESENT(&pThis->m_flags ,OMX_COMPONENT_IDLE_PENDING))
           {
-            DEBUG_PRINT_LOW("\n dev_stop called after Output flush complete\n");
+            printf("\n dev_stop called after Output flush complete\n");
             if(!pThis->input_flush_progress)
             {
               if(dev_stop() != 0)
@@ -558,8 +549,6 @@ void omx_video::process_event_cb(void *ctxt, unsigned char id)
           if(BITMASK_PRESENT(&pThis->m_flags,OMX_COMPONENT_PAUSE_PENDING))
           {
             //Send the callback now
-            pThis->complete_pending_buffer_done_cbs();
-            DEBUG_PRINT_LOW("omx_video::process_event_cb() Sending PAUSE complete after all pending EBD/FBD\n");
             BITMASK_CLEAR((&pThis->m_flags),OMX_COMPONENT_PAUSE_PENDING);
             pThis->m_state = OMX_StatePause;
             pThis->m_pCallbacks.EventHandler(&pThis->m_cmp, pThis->m_app_data,
@@ -610,7 +599,6 @@ void omx_video::process_event_cb(void *ctxt, unsigned char id)
         break;
 
       default:
-        DEBUG_PRINT_LOW("\n process_event_cb unknown msg id 0x%02x", id);
         break;
       }
     }
@@ -623,7 +611,7 @@ void omx_video::process_event_cb(void *ctxt, unsigned char id)
 
   }
   while(qsize>0);
-  DEBUG_PRINT_LOW("\n exited the while loop\n");
+  printf("\n exited the while loop\n");
 
 }
 
@@ -659,10 +647,6 @@ OMX_OUT OMX_UUIDTYPE* componentUUID
     return OMX_ErrorInvalidState;
   }
   /* TBD -- Return the proper version */
-  if (specVersion)
-  {
-    specVersion->nVersion = OMX_SPEC_VERSION;
-  }
   return OMX_ErrorNone;
 }
 /* ======================================================================
@@ -805,7 +789,7 @@ OMX_ERRORTYPE  omx_video::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
       }
       else
       {
-        DEBUG_PRINT_ERROR("ERROR: OMXCORE-SM: Loaded-->%d Not Handled\n",\
+        DEBUG_PRINT_ERROR("ERROR: OMXCORE-SM: Loaded-->Invalid(%d Not Handled)\n",\
                           eState);
         eRet = OMX_ErrorBadParameter;
       }
@@ -885,7 +869,7 @@ OMX_ERRORTYPE  omx_video::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
         else
         {
           BITMASK_SET(&m_flags,OMX_COMPONENT_PAUSE_PENDING);
-          DEBUG_PRINT_LOW("OMXCORE-SM: Idle-->Pause\n");
+          DEBUG_PRINT_LOW("OMXCORE-SM: Idle-->Executing\n");
           bFlag = 0;
         }
       }
@@ -934,7 +918,7 @@ OMX_ERRORTYPE  omx_video::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
         else
         {
           BITMASK_SET(&m_flags,OMX_COMPONENT_PAUSE_PENDING);
-          DEBUG_PRINT_LOW("OMXCORE-SM: Executing-->Pause\n");
+          DEBUG_PRINT_LOW("OMXCORE-SM: Idle-->Executing\n");
           bFlag = 0;
         }
       }
@@ -993,8 +977,7 @@ OMX_ERRORTYPE  omx_video::send_command_proxy(OMX_IN OMX_HANDLETYPE hComp,
         else
         {
           BITMASK_SET(&m_flags,OMX_COMPONENT_EXECUTE_PENDING);
-          DEBUG_PRINT_LOW("OMXCORE-SM: Pause-->Executing\n");
-          post_event (NULL, NULL, OMX_COMPONENT_GENERATE_RESUME_DONE);
+          DEBUG_PRINT_LOW("OMXCORE-SM: Idle-->Executing\n");
           bFlag = 0;
         }
       }
@@ -1953,10 +1936,10 @@ OMX_ERRORTYPE  omx_video::use_input_buffer(
 
     if(!m_use_input_pmem)
     {
-      m_pInput_pmem[i].fd = open (PMEM_DEVICE,O_RDWR);
+      m_pInput_pmem[i].fd = open ("/dev/pmem_adsp",O_RDWR);
       if(m_pInput_pmem[i].fd == 0)
       {
-        m_pInput_pmem[i].fd = open (PMEM_DEVICE,O_RDWR);
+        m_pInput_pmem[i].fd = open ("/dev/pmem_adsp",O_RDWR);
       }
 
       if(m_pInput_pmem[i] .fd < 0)
@@ -2124,11 +2107,11 @@ OMX_ERRORTYPE  omx_video::use_output_buffer(
 
       if(!m_use_output_pmem)
       {
-        m_pOutput_pmem[i].fd = open (PMEM_DEVICE,O_RDWR);
+        m_pOutput_pmem[i].fd = open ("/dev/pmem_adsp",O_RDWR);
 
         if(m_pOutput_pmem[i].fd == 0)
         {
-          m_pOutput_pmem[i].fd = open (PMEM_DEVICE,O_RDWR);
+          m_pOutput_pmem[i].fd = open ("/dev/pmem_adsp",O_RDWR);
         }
 
         if(m_pOutput_pmem[i].fd < 0)
@@ -2435,11 +2418,11 @@ OMX_ERRORTYPE  omx_video::allocate_input_buffer(
     (*bufferHdr)->pAppPrivate       = appData;
     (*bufferHdr)->nInputPortIndex   = PORT_INDEX_IN;
 
-    m_pInput_pmem[i].fd = open (PMEM_DEVICE,O_RDWR);
+    m_pInput_pmem[i].fd = open ("/dev/pmem_adsp",O_RDWR);
 
     if(m_pInput_pmem[i].fd == 0)
     {
-      m_pInput_pmem[i].fd = open (PMEM_DEVICE,O_RDWR);
+      m_pInput_pmem[i].fd = open ("/dev/pmem_adsp",O_RDWR);
     }
 
     if(m_pInput_pmem[i].fd < 0)
@@ -2560,10 +2543,10 @@ OMX_ERRORTYPE  omx_video::allocate_output_buffer(
   {
     if(i < m_sOutPortDef.nBufferCountActual)
     {
-      m_pOutput_pmem[i].fd = open (PMEM_DEVICE,O_RDWR);
+      m_pOutput_pmem[i].fd = open ("/dev/pmem_adsp",O_RDWR);
       if(m_pOutput_pmem[i].fd == 0)
       {
-        m_pOutput_pmem[i].fd = open (PMEM_DEVICE,O_RDWR);
+        m_pOutput_pmem[i].fd = open ("/dev/pmem_adsp",O_RDWR);
       }
 
       if(m_pOutput_pmem[i].fd < 0)
@@ -3554,75 +3537,4 @@ OMX_ERRORTYPE omx_video::empty_buffer_done(OMX_HANDLETYPE         hComp,
     m_pCallbacks.EmptyBufferDone(hComp ,m_app_data, buffer);
   }
   return OMX_ErrorNone;
-}
-
-void omx_video::complete_pending_buffer_done_cbs()
-{
-  unsigned p1;
-  unsigned p2;
-  unsigned ident;
-  omx_cmd_queue tmp_q, pending_bd_q;
-  pthread_mutex_lock(&m_lock);
-  // pop all pending GENERATE FDB from ftb queue
-  while (m_ftb_q.m_size)
-  {
-    m_ftb_q.pop_entry(&p1,&p2,&ident);
-    if(ident == OMX_COMPONENT_GENERATE_FBD)
-    {
-      pending_bd_q.insert_entry(p1,p2,ident);
-    }
-    else
-    {
-      tmp_q.insert_entry(p1,p2,ident);
-    }
-  }
-  //return all non GENERATE FDB to ftb queue
-  while(tmp_q.m_size)
-  {
-    tmp_q.pop_entry(&p1,&p2,&ident);
-    m_ftb_q.insert_entry(p1,p2,ident);
-  }
-  // pop all pending GENERATE EDB from etb queue
-  while (m_etb_q.m_size)
-  {
-    m_etb_q.pop_entry(&p1,&p2,&ident);
-    if(ident == OMX_COMPONENT_GENERATE_EBD)
-    {
-      pending_bd_q.insert_entry(p1,p2,ident);
-    }
-    else
-    {
-      tmp_q.insert_entry(p1,p2,ident);
-    }
-  }
-  //return all non GENERATE FDB to etb queue
-  while(tmp_q.m_size)
-  {
-    tmp_q.pop_entry(&p1,&p2,&ident);
-    m_etb_q.insert_entry(p1,p2,ident);
-  }
-  pthread_mutex_unlock(&m_lock);
-  // process all pending buffer dones
-  while(pending_bd_q.m_size)
-  {
-    pending_bd_q.pop_entry(&p1,&p2,&ident);
-    switch(ident)
-    {
-      case OMX_COMPONENT_GENERATE_EBD:
-        if(empty_buffer_done(&m_cmp, (OMX_BUFFERHEADERTYPE *)p1) != OMX_ErrorNone)
-        {
-          DEBUG_PRINT_ERROR("\nERROR: empty_buffer_done() failed!\n");
-          omx_report_error ();
-        }
-        break;
-
-      case OMX_COMPONENT_GENERATE_FBD:
-        if(fill_buffer_done(&m_cmp, (OMX_BUFFERHEADERTYPE *)p1) != OMX_ErrorNone )
-        {
-          DEBUG_PRINT_ERROR("\nERROR: fill_buffer_done() failed!\n");
-          omx_report_error ();
-        }
-        break;
-    }
-  }
 }

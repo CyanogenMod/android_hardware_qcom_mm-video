@@ -81,8 +81,6 @@ private:
   struct venc_allocatorproperty   m_sOutput_buff_property;
   struct venc_sessionqp           session_qp;
   struct venc_multiclicecfg       multislice_cfg;
-  struct venc_entropycfg          entropy_cfg;
-  struct venc_dbcfg               loopfilter_cfg;
 
   bool venc_set_profile_level(OMX_U32 eProfile,OMX_U32 eLevel);
   bool venc_set_intra_period(OMX_U32 nPFrames);
@@ -94,8 +92,6 @@ private:
   bool venc_set_color_format(OMX_COLOR_FORMATTYPE color_format);
   bool venc_validate_profile_level(OMX_U32 *eProfile, OMX_U32 *eLevel);
   bool venc_set_multislice_cfg(OMX_VIDEO_AVCSLICEMODETYPE eSliceMode);
-  bool venc_set_entropy_config(OMX_BOOL enable, OMX_U32 i_cabac_level);
-  bool venc_set_inloop_filter(OMX_VIDEO_AVCLOOPFILTERTYPE loop_filter);
 };
 
 #endif

@@ -280,13 +280,6 @@ public:
                              OMX_U32              bytes,
                              OMX_U8               *buffer);
 
-    OMX_ERRORTYPE  use_input_heap_buffers(
-                          OMX_HANDLETYPE            hComp,
-                          OMX_BUFFERHEADERTYPE** bufferHdr,
-                          OMX_U32                   port,
-                          OMX_PTR                   appData,
-                          OMX_U32                   bytes,
-                          OMX_U8*                   buffer);
 
     OMX_ERRORTYPE use_EGL_image(OMX_HANDLETYPE     hComp,
                                 OMX_BUFFERHEADERTYPE **bufferHdr,
@@ -440,6 +433,12 @@ private:
                                    OMX_PTR                appData,
                                    OMX_U32                bytes,
                                    OMX_U8                 *buffer);
+#ifdef MAX_RES_720P
+    OMX_ERRORTYPE get_supported_profile_level_for_720p(OMX_VIDEO_PARAM_PROFILELEVELTYPE *profileLevelType);
+#endif
+#ifdef MAX_RES_1080P
+    OMX_ERRORTYPE get_supported_profile_level_for_1080p(OMX_VIDEO_PARAM_PROFILELEVELTYPE *profileLevelType);
+#endif
 
     bool execute_omx_flush(OMX_U32);
     bool execute_output_flush(OMX_U32);
@@ -581,7 +580,6 @@ private:
     OMX_BOOL m_inp_bEnabled;
     // store O/P PORT state
     OMX_BOOL m_out_bEnabled;
-    OMX_U32 m_in_alloc_cnt;
     OMX_U8                m_cRole[OMX_MAX_STRINGNAME_SIZE];
     // Platform specific details
     OMX_QCOM_PLATFORM_PRIVATE_LIST      *m_platform_list;

@@ -330,7 +330,7 @@ OMX_ERRORTYPE omx_venc::component_init(OMX_STRING role)
   m_sParamAVC.nPFrames = 29;
   m_sParamAVC.nBFrames = 0;
   m_sParamAVC.bUseHadamard = OMX_FALSE;//todo: to decide the value
-  m_sParamAVC.nRefFrames = 1;
+  m_sParamAVC.nRefFrames = 0; //todo: to decide the value
   m_sParamAVC.nRefIdx10ActiveMinus1 = 0; //todo: to decide the value
   m_sParamAVC.nRefIdx11ActiveMinus1 = 0; //todo: to decide the value
   m_sParamAVC.bEnableUEP = OMX_FALSE; //todo: to decide the value
@@ -349,7 +349,7 @@ OMX_ERRORTYPE omx_venc::component_init(OMX_STRING role)
   m_sParamAVC.bDirect8x8Inference = OMX_FALSE; //todo: to decide the value
   m_sParamAVC.bDirectSpatialTemporal = OMX_FALSE; //todo: to decide the value
   m_sParamAVC.nCabacInitIdc = 0; //todo: to decide the value
-  m_sParamAVC.eLoopFilterMode = OMX_VIDEO_AVCLoopFilterEnable; //todo: to decide the value
+  //m_sParamAVC.eLoopFilterMode = 0; //todo: to decide the value
 
   m_state                   = OMX_StateLoaded;
 
@@ -601,7 +601,6 @@ OMX_ERRORTYPE  omx_venc::set_parameter(OMX_IN OMX_HANDLETYPE     hComp,
     {
       OMX_VIDEO_PARAM_AVCTYPE* pParam = (OMX_VIDEO_PARAM_AVCTYPE*)paramData;
       DEBUG_PRINT_LOW("set_parameter: OMX_IndexParamVideoAvc");
-      DEBUG_PRINT_ERROR("set_parameter: OMX_IndexParamVideoAvc");
       if(handle->venc_set_param(paramData,OMX_IndexParamVideoAvc) != true)
       {
         return OMX_ErrorUnsupportedSetting;
@@ -610,14 +609,6 @@ OMX_ERRORTYPE  omx_venc::set_parameter(OMX_IN OMX_HANDLETYPE     hComp,
       m_sParamAVC.nPFrames = pParam->nPFrames;
       m_sParamAVC.eProfile = pParam->eProfile;
       m_sParamAVC.eLevel = pParam->eLevel;
-      printf("\n SET_PARAM AVC profile %d Index %d ", m_sParamAVC.eProfile, m_sParamAVC.eLevel);
-      m_sParamAVC.bEntropyCodingCABAC = pParam->bEntropyCodingCABAC;
-      m_sParamAVC.nCabacInitIdc = pParam->nCabacInitIdc;
-      if(pParam->nRefFrames != 1)
-      {
-        m_sParamAVC.nRefFrames = 1;
-        DEBUG_PRINT_ERROR("Invalid number of Reference Frame Set defaulting to 1\n");
-      }
 
       m_sParamProfileLevel.eProfile = pParam->eProfile;
       m_sParamProfileLevel.eLevel = pParam->eLevel;

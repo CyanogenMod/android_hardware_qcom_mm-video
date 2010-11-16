@@ -45,6 +45,12 @@ ifeq "$(findstring qsd8650a,$(TARGET_PRODUCT))" "qsd8650a"
     include $(OMX_VIDEO_PATH)/qdsp6/venc/Android.mk
 endif
 
+# Decoder is not producing the correct output
+ifeq "$(findstring msm7x30,$(TARGET_PRODUCT))" "msm7x30"
+#    include $(OMX_VIDEO_PATH)/vidc/vdec/Android.mk
+    include $(OMX_VIDEO_PATH)/vidc/venc/Android.mk
+endif
+
 ifeq "$(findstring msm7630,$(TARGET_PRODUCT))" "msm7630"
     include $(OMX_VIDEO_PATH)/vidc/vdec/Android.mk
     include $(OMX_VIDEO_PATH)/vidc/venc/Android.mk

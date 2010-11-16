@@ -52,10 +52,10 @@ libOmxVdec-def += -DENABLE_DEBUG_ERROR
 libOmxVdec-def += -UMULTI_DEC_INST
 libOmxVdec-def += -UINPUT_BUFFER_LOG
 libOmxVdec-def += -UOUTPUT_BUFFER_LOG
-ifeq "$(findstring msm7630,$(TARGET_PRODUCT))" "msm7630"
+ifeq "$(findstring msm7x30,$(TARGET_BOARD_PLATFORM))" "msm7x30"
 libOmxVdec-def += -DMAX_RES_720P
 endif
-ifeq "$(findstring msm8660,$(TARGET_PRODUCT))" "msm8660"
+ifeq "$(findstring msm8660,$(TARGET_BOARD_PLATFORM))" "msm8660"
 libOmxVdec-def += -DMAX_RES_1080P
 endif
 # ---------------------------------------------------------------------------------
