@@ -46,7 +46,7 @@ ifeq "$(findstring qsd8650a,$(TARGET_PRODUCT))" "qsd8650a"
 endif
 
 # Decoder is not producing the correct output
-ifeq "$(findstring msm7x30,$(TARGET_PRODUCT))" "msm7x30"
+ifeq "$(findstring msm7x30,$(TARGET_BOARD_PLATFORM))" "msm7x30"
 #    include $(OMX_VIDEO_PATH)/vidc/vdec/Android.mk
     include $(OMX_VIDEO_PATH)/vidc/venc/Android.mk
 endif
